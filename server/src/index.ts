@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 
 // Cargar variables de entorno desde la raíz o local
 dotenv.config({ path: path.resolve(__dirname, '../../.env') });
@@ -35,7 +36,6 @@ app.get('/api/health', (req, res) => {
 app.use('/api', router);
 
 // Servir frontend compilado en producción
-import fs from 'fs';
 const clientDistPath = path.resolve(__dirname, '../../client/dist');
 if (fs.existsSync(clientDistPath)) {
   app.use(express.static(clientDistPath));

@@ -19,12 +19,11 @@ services:
     plan: free
     region: oregon
     branch: main
-    # 1. Instala dependencias del monorepo
-    # 2. Compila shared, server y client (React Vite)
-    # 3. Sincroniza las tablas de PostgreSQL con Prisma
-    # 4. Inicializa los usuarios base (2 de 5 cupos) y dotación
-    buildCommand: npm install && npm run build && npx prisma db push --schema=server/prisma/schema.prisma && npx tsx server/src/database/seed.ts
-    # Inicia el servidor Node.js que expone la API y sirve la SPA de React
+    # Fase 1: Compilación de paquetes (npm workspaces)
+    buildCommand: npm install && npm run build
+    # Fase 2: Pre-despliegue con acceso a la red privada de PostgreSQL
+    preDeployCommand: npx prisma db push --schema=server/prisma/schema.prisma && npx tsx server/src/database/seed.ts
+    # Fase 3: Arranque del servidor que sirve la API y la SPA
     startCommand: node server/dist/index.js
     envVars:
       - key: NODE_ENV
@@ -41,5 +40,3 @@ services:
         value: 8h
       - key: MAX_REGISTERED_USERS
         value: 5
-      - key: CLIENT_URL
-        value: https://app-informes.onrender.com

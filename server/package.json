@@ -25,6 +25,8 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^6.9.13",
+    "prisma": "^5.14.0",
+    "tsx": "^4.10.5",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -35,8 +37,6 @@
     "@types/multer": "^1.4.11",
     "@types/node": "^20.12.12",
     "@types/nodemailer": "^6.4.15",
-    "prisma": "^5.14.0",
-    "tsx": "^4.10.5",
     "typescript": "^5.4.5"
   }
 }
