@@ -269,7 +269,7 @@ export const InformesCRR: React.FC = () => {
                   >
                     {avisos.map((a) => (
                       <option key={a.id} value={a.id}>
-                        Aviso #{a.numeroAviso} - {a.descripcion.substring(0, 35)}...
+                        Aviso #{a.numeroAviso} {a.numeroOrden ? `[OT: ${a.numeroOrden}]` : ''} - {a.descripcion.substring(0, 35)}...
                       </option>
                     ))}
                   </select>

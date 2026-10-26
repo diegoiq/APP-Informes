@@ -58,6 +58,9 @@ export class SapParserService {
       totalAvisosProcesados: 0,
       totalOMProcesadas: 0,
       totalAnalisisProcesados: 0,
+      avisosAbiertos: 0,
+      avisosCerrados: 0,
+      avisosConOM: 0,
       insertados: 0,
       actualizados: 0,
       filtrados340CRR: 0,
@@ -236,6 +239,18 @@ export class SapParserService {
       // Cruce con Análisis
       const analisisInfo =
         analisisMap.get(`aviso:${numeroAviso}`) || (numeroOrden ? analisisMap.get(`orden:${numeroOrden}`) : undefined);
+
+      const isCerrado = /MECE|CTEC|CERR/i.test(estadoSistema);
+      if (isCerrado) {
+        summary.avisosCerrados++;
+      } else {
+        summary.avisosAbiertos++;
+      }
+
+      const finalOrden = numeroOrden || omInfo?.numOrden;
+      if (finalOrden) {
+        summary.avisosConOM++;
+      }
 
       const ptoTbjo = omInfo?.ptoTbjoResponsable || '';
       const is340CRR = ptoTbjo.toUpperCase().includes('340CRR') || ptoTbjo === '';

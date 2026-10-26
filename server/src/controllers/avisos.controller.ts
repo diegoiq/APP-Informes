@@ -33,6 +33,55 @@ export class AvisosController {
   }
 
   /**
+   * Obtiene estadísticas agregadas de avisos (abiertos vs cerrados vs OMs)
+   */
+  public static async getStats(req: Request, res: Response) {
+    try {
+      const [total, abiertos, cerrados, conOM, sinOM] = await Promise.all([
+        prisma.aviso.count(),
+        prisma.aviso.count({
+          where: {
+            NOT: [
+              { estadoSistema: { contains: 'MECE' } },
+              { estadoSistema: { contains: 'CTEC' } },
+              { estadoSistema: { contains: 'CERR' } }
+            ]
+          }
+        }),
+        prisma.aviso.count({
+          where: {
+            OR: [
+              { estadoSistema: { contains: 'MECE' } },
+              { estadoSistema: { contains: 'CTEC' } },
+              { estadoSistema: { contains: 'CERR' } }
+            ]
+          }
+        }),
+        prisma.aviso.count({
+          where: {
+            numeroOrden: { not: null }
+          }
+        }),
+        prisma.aviso.count({
+          where: {
+            numeroOrden: null
+          }
+        })
+      ]);
+
+      return res.json({
+        total,
+        abiertos,
+        cerrados,
+        conOM,
+        sinOM
+      });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Error al obtener estadísticas de avisos', error: error.message });
+    }
+  }
+
+  /**
    * Lista todos los avisos con filtros operacionales
    */
   public static async list(req: Request, res: Response) {
@@ -42,19 +91,69 @@ export class AvisosController {
         rubro,
         prioridadReal,
         solo340CRR,
-        faseAvance
+        faseAvance,
+        estado,
+        conOM,
+        revision
       } = req.query;
 
       const where: any = {};
+      const andConditions: any[] = [];
 
       if (search) {
         const query = String(search).trim();
-        where.OR = [
-          { numeroAviso: { contains: query } },
-          { numeroOrden: { contains: query } },
-          { descripcion: { contains: query } },
-          { ubicacionTecnica: { contains: query } }
-        ];
+        andConditions.push({
+          OR: [
+            { numeroAviso: { contains: query } },
+            { numeroOrden: { contains: query } },
+            { descripcion: { contains: query } },
+            { ubicacionTecnica: { contains: query } },
+            { revision: { contains: query } }
+          ]
+        });
+      }
+
+      if (estado === 'abiertos') {
+        andConditions.push({
+          NOT: [
+            { estadoSistema: { contains: 'MECE' } },
+            { estadoSistema: { contains: 'CTEC' } },
+            { estadoSistema: { contains: 'CERR' } }
+          ]
+        });
+      } else if (estado === 'cerrados') {
+        andConditions.push({
+          OR: [
+            { estadoSistema: { contains: 'MECE' } },
+            { estadoSistema: { contains: 'CTEC' } },
+            { estadoSistema: { contains: 'CERR' } }
+          ]
+        });
+      }
+
+      if (conOM === 'true') {
+        andConditions.push({
+          numeroOrden: { not: null }
+        });
+      } else if (conOM === 'false') {
+        andConditions.push({
+          numeroOrden: null
+        });
+      }
+
+      if (revision) {
+        andConditions.push({
+          revision: { contains: String(revision).trim() }
+        });
+      }
+
+      if (solo340CRR === 'true') {
+        andConditions.push({
+          OR: [
+            { ptoTbjoResponsable: { contains: '340CRR' } },
+            { ptoTbjoResponsable: null }
+          ]
+        });
       }
 
       if (rubro) {
@@ -69,8 +168,8 @@ export class AvisosController {
         where.faseAvance = String(faseAvance);
       }
 
-      if (solo340CRR === 'true') {
-        where.ptoTbjoResponsable = { contains: '340CRR' };
+      if (andConditions.length > 0) {
+        where.AND = andConditions;
       }
 
       const avisos = await prisma.aviso.findMany({

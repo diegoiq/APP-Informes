@@ -75,6 +75,10 @@ class ApiService {
     });
   }
 
+  public getAvisosStats() {
+    return this.request('/avisos/stats');
+  }
+
   public getAvisos(params?: Record<string, string>) {
     const query = params ? `?${new URLSearchParams(params).toString()}` : '';
     return this.request(`/avisos${query}`);

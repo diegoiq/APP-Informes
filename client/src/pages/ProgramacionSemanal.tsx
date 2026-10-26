@@ -38,7 +38,7 @@ export const ProgramacionSemanal: React.FC = () => {
     try {
       const [progData, avisosData] = await Promise.all([
         api.getProgramacionSemanal(semana, anio, rubroFilter || undefined),
-        api.getAvisos({ solo340CRR: 'true' })
+        api.getAvisos({ solo340CRR: 'true', estado: 'abiertos' })
       ]);
       setTablero(progData);
       setAvisos(avisosData);
@@ -313,7 +313,7 @@ export const ProgramacionSemanal: React.FC = () => {
                 >
                   {avisos.map((a) => (
                     <option key={a.id} value={a.id}>
-                      #{a.numeroAviso} - {a.descripcion.substring(0, 45)}... ({a.rubro || 'General'})
+                      #{a.numeroAviso} {a.numeroOrden ? `[OT: ${a.numeroOrden}]` : ''} {a.revision ? `[Rev: ${a.revision}]` : ''} - {a.descripcion.substring(0, 45)}... ({a.rubro || 'General'})
                     </option>
                   ))}
                 </select>

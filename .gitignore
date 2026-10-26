@@ -51,6 +51,8 @@ server/prisma/*.db-journal
 uploads/
 server/uploads/
 *.tmp
+*.xlsx
+*.xlsm
 
 # Environment variables
 .env

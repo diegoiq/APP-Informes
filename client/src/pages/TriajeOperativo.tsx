@@ -11,7 +11,14 @@ import {
   Copy,
   ChevronRight,
   Send,
-  Plus
+  Plus,
+  Search,
+  Wrench,
+  Layers,
+  Calendar,
+  Building,
+  CheckCircle2,
+  Tag
 } from 'lucide-react';
 import { PRIORIDADES_REALES } from '@app-informes/shared';
 
@@ -19,6 +26,12 @@ export const TriajeOperativo: React.FC = () => {
   const [avisos, setAvisos] = useState<any[]>([]);
   const [selectedAviso, setSelectedAviso] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState<any | null>(null);
+
+  // Filtros de Triaje
+  const [filtroEstado, setFiltroEstado] = useState<'abiertos' | 'todos' | 'cerrados'>('abiertos');
+  const [filtroOM, setFiltroOM] = useState<'todos' | 'con_om' | 'sin_om'>('todos');
+  const [search, setSearch] = useState('');
 
   // Modal registrar contacto
   const [showContactModal, setShowContactModal] = useState(false);
@@ -32,12 +45,27 @@ export const TriajeOperativo: React.FC = () => {
   const [plantillaTexto, setPlantillaTexto] = useState('');
   const [copied, setCopied] = useState(false);
 
+  const loadStats = async () => {
+    try {
+      const data = await api.getAvisosStats();
+      setStats(data);
+    } catch (err) {
+      console.error('Error cargando stats de avisos:', err);
+    }
+  };
+
   const loadAvisos = async () => {
     setLoading(true);
     try {
-      const data = await api.getAvisos();
+      const params: Record<string, string> = {};
+      if (filtroEstado !== 'todos') params.estado = filtroEstado;
+      if (filtroOM === 'con_om') params.conOM = 'true';
+      if (filtroOM === 'sin_om') params.conOM = 'false';
+      if (search) params.search = search;
+
+      const data = await api.getAvisos(params);
       setAvisos(data);
-      if (data.length > 0 && !selectedAviso) {
+      if (data.length > 0 && (!selectedAviso || !data.some((a: any) => a.id === selectedAviso.id))) {
         setSelectedAviso(data[0]);
       } else if (selectedAviso) {
         const updated = data.find((a: any) => a.id === selectedAviso.id);
@@ -51,8 +79,12 @@ export const TriajeOperativo: React.FC = () => {
   };
 
   useEffect(() => {
-    loadAvisos();
+    loadStats();
   }, []);
+
+  useEffect(() => {
+    loadAvisos();
+  }, [filtroEstado, filtroOM, search]);
 
   const handleUpdatePrioridad = async (prioridadId: number) => {
     if (!selectedAviso) return;
@@ -125,66 +157,182 @@ export const TriajeOperativo: React.FC = () => {
         
         {/* Columna Izquierda: Lista de Avisos */}
         <div className="lg:col-span-5 space-y-3">
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex items-center justify-between">
-            <span className="font-bold text-slate-800 text-xs uppercase">Avisos Pendientes de Triaje</span>
-            <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-bold text-xs">
-              {avisos.length} avisos
-            </span>
+          
+          {/* Header & Filtros Rápidos */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800 text-xs uppercase tracking-wider">
+                {filtroEstado === 'abiertos' ? '🟢 Avisos Abiertos en Triaje' : filtroEstado === 'cerrados' ? '⚪ Histórico Cerrados (MECE)' : '📋 Todos los Avisos'}
+              </span>
+              <span className="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 font-extrabold text-xs">
+                {avisos.length} avisos
+              </span>
+            </div>
+
+            {/* Buscador */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por Aviso, OT o Solicitante..."
+                className="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
+
+            {/* Tabs Estado: Abiertos (Defecto) vs Cerrados vs Todos */}
+            <div className="grid grid-cols-3 gap-1 bg-slate-100 p-1 rounded-lg text-[11px] font-bold">
+              <button
+                type="button"
+                onClick={() => setFiltroEstado('abiertos')}
+                className={`py-1.5 px-2 rounded-md transition text-center ${
+                  filtroEstado === 'abiertos'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                🟢 Abiertos ({stats?.abiertos ?? '...'})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltroEstado('cerrados')}
+                className={`py-1.5 px-2 rounded-md transition text-center ${
+                  filtroEstado === 'cerrados'
+                    ? 'bg-slate-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                ⚪ MECE ({stats?.cerrados ?? '...'})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltroEstado('todos')}
+                className={`py-1.5 px-2 rounded-md transition text-center ${
+                  filtroEstado === 'todos'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Todos ({stats?.total ?? '...'})
+              </button>
+            </div>
+
+            {/* Sub-filtro Cruce OM */}
+            <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100 text-[10px] font-semibold text-slate-500">
+              <span className="text-slate-400">OM:</span>
+              <button
+                type="button"
+                onClick={() => setFiltroOM('todos')}
+                className={`px-2 py-0.5 rounded transition ${
+                  filtroOM === 'todos' ? 'bg-slate-800 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                Todas
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltroOM('con_om')}
+                className={`px-2 py-0.5 rounded transition ${
+                  filtroOM === 'con_om' ? 'bg-sky-700 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                🛠️ Con Orden OT ({stats?.conOM ?? '...'})
+              </button>
+              <button
+                type="button"
+                onClick={() => setFiltroOM('sin_om')}
+                className={`px-2 py-0.5 rounded transition ${
+                  filtroOM === 'sin_om' ? 'bg-amber-700 text-white font-bold' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                }`}
+              >
+                ⚠️ Sin Orden ({stats?.sinOM ?? '...'})
+              </button>
+            </div>
           </div>
 
           <div className="space-y-2.5 max-h-[750px] overflow-y-auto pr-1">
-            {avisos.map((aviso) => {
-              const isSelected = selectedAviso?.id === aviso.id;
-              return (
-                <div
-                  key={aviso.id}
-                  onClick={() => setSelectedAviso(aviso)}
-                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
-                    isSelected
-                      ? 'bg-sky-50/80 border-sky-400 shadow-md ring-1 ring-sky-300'
-                      : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-extrabold text-sm text-slate-900">
-                      Aviso {aviso.numeroAviso}
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-600">
-                      SAP: {aviso.prioridadSap || 'Media'}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed">
-                    {aviso.descripcion}
-                  </p>
-                  
-                  <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                    <span className="font-semibold text-slate-500">{aviso.rubro || 'General'}</span>
+            {avisos.length === 0 ? (
+              <div className="p-8 text-center text-xs text-slate-400 bg-white rounded-xl border border-slate-200">
+                No hay avisos con los filtros seleccionados.
+              </div>
+            ) : (
+              avisos.map((aviso) => {
+                const isSelected = selectedAviso?.id === aviso.id;
+                const isCerrado = /MECE|CTEC|CERR/i.test(aviso.estadoSistema);
+                return (
+                  <div
+                    key={aviso.id}
+                    onClick={() => setSelectedAviso(aviso)}
+                    className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                      isSelected
+                        ? 'bg-sky-50/80 border-sky-400 shadow-md ring-1 ring-sky-300'
+                        : isCerrado
+                        ? 'bg-slate-50/60 border-slate-200 hover:border-slate-300 opacity-75'
+                        : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-extrabold text-sm text-slate-900">
+                          Aviso {aviso.numeroAviso}
+                        </span>
+                        {aviso.numeroOrden && (
+                          <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-sky-100 text-sky-800 border border-sky-200">
+                            OT: {aviso.numeroOrden}
+                          </span>
+                        )}
+                        {aviso.revision && (
+                          <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-purple-100 text-purple-800">
+                            {aviso.revision}
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                        isCerrado
+                          ? 'bg-slate-200 text-slate-600'
+                          : 'bg-emerald-100 text-emerald-800'
+                      }`}>
+                        {isCerrado ? '⚪' : '🟢'} {aviso.estadoSistema}
+                      </span>
+                    </div>
                     
-                    {/* Badge de Insistencias */}
-                    <div className="flex items-center gap-1.5">
-                      {aviso.contadorInsistencias > 0 && (
-                        <span className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-extrabold text-[10px] flex items-center gap-1">
-                          <Mail className="w-3 h-3" />
-                          <span>{aviso.contadorInsistencias} reiteraciones</span>
-                        </span>
-                      )}
+                    <p className="text-xs text-slate-600 font-medium line-clamp-2 leading-relaxed">
+                      {aviso.descripcion}
+                    </p>
+                    
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-slate-500">{aviso.rubro || 'General'}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">SAP:{aviso.prioridadSap || '5'}</span>
+                      </div>
+                      
+                      {/* Badge de Insistencias y Prioridad Real */}
+                      <div className="flex items-center gap-1.5">
+                        {aviso.contadorInsistencias > 0 && (
+                          <span className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-extrabold text-[10px] flex items-center gap-1">
+                            <Mail className="w-3 h-3" />
+                            <span>{aviso.contadorInsistencias}</span>
+                          </span>
+                        )}
 
-                      {aviso.prioridadRealAcordada ? (
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                          aviso.prioridadRealAcordada === 1 ? 'bg-red-500 text-white' :
-                          aviso.prioridadRealAcordada === 2 ? 'bg-amber-500 text-white' :
-                          aviso.prioridadRealAcordada === 3 ? 'bg-sky-500 text-white' : 'bg-slate-400 text-white'
-                        }`}>
-                          Real: P{aviso.prioridadRealAcordada}
-                        </span>
-                      ) : (
-                        <span className="text-amber-600 font-bold text-[10px]">Sin acordar</span>
-                      )}
+                        {aviso.prioridadRealAcordada ? (
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                            aviso.prioridadRealAcordada === 1 ? 'bg-red-500 text-white' :
+                            aviso.prioridadRealAcordada === 2 ? 'bg-amber-500 text-white' :
+                            aviso.prioridadRealAcordada === 3 ? 'bg-sky-500 text-white' : 'bg-slate-400 text-white'
+                          }`}>
+                            Real: P{aviso.prioridadRealAcordada}
+                          </span>
+                        ) : (
+                          <span className="text-amber-600 font-bold text-[10px]">Por triar</span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -271,6 +419,97 @@ export const TriajeOperativo: React.FC = () => {
                 </div>
               </div>
 
+            </div>
+
+            {/* Tarjeta de Cruce Relacional con Orden de Mantenimiento (OM) */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-sky-100 text-sky-700 rounded-lg">
+                    <Wrench className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900">Cruce con Orden de Mantenimiento (OM)</h3>
+                    <p className="text-[11px] text-slate-500">Datos consolidados desde hoja OM y Análisis SAP</p>
+                  </div>
+                </div>
+                {selectedAviso.numeroOrden ? (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-extrabold bg-sky-100 text-sky-800 border border-sky-300">
+                    OT: {selectedAviso.numeroOrden}
+                  </span>
+                ) : (
+                  <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                    Sin OT Asociada
+                  </span>
+                )}
+              </div>
+
+              {selectedAviso.numeroOrden ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 text-xs">
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="text-[10px] text-slate-500 font-semibold uppercase">Revisión Planificada</div>
+                    <div className="font-extrabold text-purple-700 text-sm mt-0.5">
+                      {selectedAviso.revision || 'Sin revisión SAP'}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="text-[10px] text-slate-500 font-semibold uppercase">Fase de Avance</div>
+                    <div className="font-extrabold text-emerald-700 text-sm mt-0.5">
+                      {selectedAviso.faseAvance || '1. Planificación'}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="text-[10px] text-slate-500 font-semibold uppercase">Pto. Trabajo Responsable</div>
+                    <div className="font-extrabold text-slate-900 text-sm mt-0.5">
+                      {selectedAviso.ptoTbjoResponsable || '340CRR'}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 col-span-2">
+                    <div className="text-[10px] text-slate-500 font-semibold uppercase">Ventana Fechas Extremas</div>
+                    <div className="font-bold text-slate-800 mt-0.5">
+                      {selectedAviso.fechaInicioExtrema ? (
+                        <span>
+                          {new Date(selectedAviso.fechaInicioExtrema).toLocaleDateString('es-CL')} al {selectedAviso.fechaFinExtrema ? new Date(selectedAviso.fechaFinExtrema).toLocaleDateString('es-CL') : 'Abierta'}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">Sin fechas extremas en hoja OM</span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="text-[10px] text-slate-500 font-semibold uppercase">Costes Reales</div>
+                    <div className="font-extrabold text-slate-900 mt-0.5">
+                      {selectedAviso.costesTotReales ? `$${selectedAviso.costesTotReales.toLocaleString('es-CL')}` : '$0'}
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 col-span-2 sm:col-span-3">
+                    <div className="text-[10px] text-slate-500 font-semibold uppercase">Ubicación Técnica Detallada</div>
+                    <div className="font-bold text-slate-800 mt-0.5 font-mono">
+                      {selectedAviso.ubicacionTecnica}
+                    </div>
+                    {selectedAviso.denominacionUbicacion && (
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        {selectedAviso.denominacionUbicacion}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Aviso en espera de Orden de Trabajo (OT)</strong>
+                    <p className="text-[11px] text-amber-700 mt-0.5">
+                      Este aviso aún no registra un cruce con la hoja OM. El triaje permite acordar la prioridad real técnica con el solicitante antes de que planificación emita la orden en SAP.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Historial de Contacto con Solicitante */}
