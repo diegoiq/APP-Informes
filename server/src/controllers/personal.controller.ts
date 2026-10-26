@@ -101,7 +101,7 @@ export class PersonalController {
 
         // Sumar horas asignadas en la semana
         const horasAsignadasTotales = p.asignaciones.reduce(
-          (acc, asig) => acc + (asig.horasAsignadas || 0),
+          (acc: number, asig: any) => acc + (asig.horasAsignadas || 0),
           0
         );
 
