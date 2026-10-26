@@ -95,7 +95,7 @@ export class PersonalController {
       });
 
       // Cálculo de balance de capacidad
-      const tablero = personalList.map((p) => {
+      const tablero = personalList.map((p: any) => {
         // Horas base semanales (régimen 8 o 9 horas * 5 días laborales = 40 o 45h)
         const horasBaseSemanales = (p.regimenHorario || 9) * 5;
 
