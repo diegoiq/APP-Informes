@@ -7,7 +7,7 @@ databases:
   # Base de Datos PostgreSQL Gestionada (Capa Gratuita de Render)
   - name: app-informes-db
     databaseName: app_informes
-    user: postgres
+    user: app_informes_user
     plan: free
     region: oregon
 
