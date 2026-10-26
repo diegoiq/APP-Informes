@@ -7,6 +7,7 @@ import { PersonalController } from '../controllers/personal.controller';
 import { ObrasController } from '../controllers/obras.controller';
 import { InformesController } from '../controllers/informes.controller';
 import { AdminController } from '../controllers/admin.controller';
+import { ProgramacionAraucoController } from '../controllers/programacionArauco.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -45,6 +46,14 @@ router.delete('/personal/ausencias/:id', authMiddleware as any, PersonalControll
 router.get('/programacion', PersonalController.getProgramacionSemanal);
 router.post('/programacion/asignacion', authMiddleware as any, PersonalController.guardarAsignacion as any);
 router.delete('/programacion/asignacion/:id', authMiddleware as any, PersonalController.eliminarAsignacion as any);
+
+// 5.1 PROGRAMA DIARIO SEMANAL OFICIAL ARAUCO (PS432026 / IW37N)
+router.get('/programacion/arauco', ProgramacionAraucoController.getProgramacion);
+router.post('/programacion/arauco/upload', upload.single('file'), ProgramacionAraucoController.uploadPSFile);
+router.post('/programacion/arauco/dotacion', authMiddleware as any, ProgramacionAraucoController.updateDotacion as any);
+router.post('/programacion/arauco/operacion', authMiddleware as any, ProgramacionAraucoController.saveOperacion as any);
+router.delete('/programacion/arauco/operacion/:id', authMiddleware as any, ProgramacionAraucoController.removeOperacion as any);
+router.get('/operaciones/backlog', ProgramacionAraucoController.getBacklogOperaciones);
 
 // 6. OBRAS Y LIBRO DIARIO
 router.get('/obras', ObrasController.listObras);

@@ -2,363 +2,712 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import {
   CalendarDays,
-  Users,
-  AlertCircle,
+  UploadCloud,
+  RefreshCw,
   Plus,
   Trash2,
-  Clock,
-  CheckCircle,
-  Filter,
-  UserCheck,
+  Printer,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  CheckCircle2,
+  AlertTriangle,
+  Search,
+  Building,
+  Wrench,
+  Clock,
+  Layers,
+  Save,
+  Check
 } from 'lucide-react';
-import { RUBROS, RubroType } from '@app-informes/shared';
 
-const DIAS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes'];
+const DIAS = [
+  { key: 'mi', label: 'Miércoles', short: 'Mi', dayIndex: 0 },
+  { key: 'ju', label: 'Jueves', short: 'Ju', dayIndex: 1 },
+  { key: 'vi', label: 'Viernes', short: 'Vi', dayIndex: 2 },
+  { key: 'sa', label: 'Sábado', short: 'Sa', dayIndex: 3 },
+  { key: 'dom', label: 'Domingo', short: 'Do', dayIndex: 4 },
+  { key: 'lu', label: 'Lunes', short: 'Lu', dayIndex: 5 },
+  { key: 'ma', label: 'Martes', short: 'Ma', dayIndex: 6 }
+];
 
 export const ProgramacionSemanal: React.FC = () => {
-  const [semana, setSemana] = useState(44);
+  const [semana, setSemana] = useState(43);
   const [anio, setAnio] = useState(2026);
-  const [rubroFilter, setRubroFilter] = useState('');
-  const [tablero, setTablero] = useState<any[]>([]);
-  const [avisos, setAvisos] = useState<any[]>([]);
+  const [ptoTbjo, setPtoTbjo] = useState('340CRR');
+  const [data, setData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
 
-  // Modal Asignar Tarea
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [selectedOperario, setSelectedOperario] = useState<any | null>(null);
-  const [selectedDia, setSelectedDia] = useState('Lunes');
-  const [selectedAvisoId, setSelectedAvisoId] = useState('');
-  const [horas, setHoras] = useState(4);
-  const [tareaDesc, setTareaDesc] = useState('');
+  // Modal para agregar operación desde Backlog IW37N
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [backlogOps, setBacklogOps] = useState<any[]>([]);
+  const [searchBacklog, setSearchBacklog] = useState('');
+  const [loadingBacklog, setLoadingBacklog] = useState(false);
 
-  const loadData = async () => {
+  // Edición rápida de dotación
+  const [editDotacion, setEditDotacion] = useState(false);
+  const [dotacionForm, setDotacionForm] = useState({
+    opMiercoles: 7,
+    opJueves: 8,
+    opViernes: 8,
+    opSabado: 0,
+    opDomingo: 0,
+    opLunes: 7,
+    opMartes: 8
+  });
+
+  const loadProgramacion = async () => {
     setLoading(true);
     try {
-      const [progData, avisosData] = await Promise.all([
-        api.getProgramacionSemanal(semana, anio, rubroFilter || undefined),
-        api.getAvisos({ solo340CRR: 'true', estado: 'abiertos' })
-      ]);
-      setTablero(progData);
-      setAvisos(avisosData);
-    } catch (err) {
-      console.error(err);
+      const res = await api.getProgramacionArauco(semana, anio, ptoTbjo);
+      setData(res);
+      if (res.dotacion) {
+        setDotacionForm({
+          opMiercoles: res.dotacion.opMiercoles,
+          opJueves: res.dotacion.opJueves,
+          opViernes: res.dotacion.opViernes,
+          opSabado: res.dotacion.opSabado,
+          opDomingo: res.dotacion.opDomingo,
+          opLunes: res.dotacion.opLunes,
+          opMartes: res.dotacion.opMartes
+        });
+      }
+    } catch (err: any) {
+      console.error('Error al cargar programación Arauco:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
-  }, [semana, anio, rubroFilter]);
+    loadProgramacion();
+  }, [semana, anio, ptoTbjo]);
 
-  const handleOpenAssignModal = (operario: any, dia: string) => {
-    setSelectedOperario(operario);
-    setSelectedDia(dia);
-    setSelectedAvisoId(avisos[0]?.id || '');
-    setHoras(4);
-    setTareaDesc('');
-    setShowAssignModal(true);
+  // Subida de archivo PS...xlsm
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    setUploadSuccess(null);
+    try {
+      const res = await api.uploadPSFile(file);
+      setUploadSuccess(`Archivo ${file.name} importado exitosamente (${res.summary.totalOperaciones} operaciones).`);
+      setSemana(res.summary.semana);
+      setAnio(res.summary.anio);
+      await loadProgramacion();
+      setTimeout(() => setUploadSuccess(null), 5000);
+    } catch (err: any) {
+      alert(err.message || 'Error al importar archivo de programación');
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const handleGuardarAsignacion = async (e: React.FormEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    if (!selectedOperario) return;
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileUpload(e.dataTransfer.files[0]);
+    }
+  };
 
+  // Guardar cambio de dotación
+  const handleSaveDotacion = async () => {
     try {
-      // Fecha ficticia según día de la semana
-      const baseDate = new Date(anio, 9, 26); // Semana de prueba en Oct 2026
-      const diaOffset = DIAS.indexOf(selectedDia);
-      const fechaAsig = new Date(baseDate);
-      fechaAsig.setDate(baseDate.getDate() + diaOffset);
-
-      await api.guardarAsignacion({
+      await api.updateDotacionArauco({
         semana,
         anio,
-        personalId: selectedOperario.id,
-        avisoId: selectedAvisoId || null,
-        diaSemana: selectedDia,
-        fecha: fechaAsig.toISOString(),
-        horasAsignadas: horas,
-        descripcionTarea: tareaDesc || 'Mantenimiento estructural preventivo'
+        ptoTbjo,
+        ...dotacionForm
       });
-
-      setShowAssignModal(false);
-      await loadData();
+      setEditDotacion(false);
+      await loadProgramacion();
     } catch (err: any) {
-      alert(err.message || 'Error al guardar asignación');
+      alert(err.message || 'Error al guardar dotación');
     }
   };
 
-  const handleEliminarAsignacion = async (asigId: string) => {
-    if (!confirm('¿Eliminar esta asignación horaria?')) return;
+  // Guardar horas diarias de una operación
+  const handleSaveOperacionHours = async (op: any, diaKey: string, horas: number) => {
     try {
-      await api.eliminarAsignacion(asigId);
-      await loadData();
+      const fieldMap: Record<string, string> = {
+        mi: 'hhMiercoles',
+        ju: 'hhJueves',
+        vi: 'hhViernes',
+        sa: 'hhSabado',
+        dom: 'hhDomingo',
+        lu: 'hhLunes',
+        ma: 'hhMartes'
+      };
+
+      const payload = {
+        id: op.id,
+        semanaProg: semana,
+        anioProg: anio,
+        hhMiercoles: diaKey === 'mi' ? horas : op.hhMiercoles,
+        hhJueves: diaKey === 'ju' ? horas : op.hhJueves,
+        hhViernes: diaKey === 'vi' ? horas : op.hhViernes,
+        hhSabado: diaKey === 'sa' ? horas : op.hhSabado,
+        hhDomingo: diaKey === 'dom' ? horas : op.hhDomingo,
+        hhLunes: diaKey === 'lu' ? horas : op.hhLunes,
+        hhMartes: diaKey === 'ma' ? horas : op.hhMartes
+      };
+
+      await api.saveOperacionArauco(payload);
+      await loadProgramacion();
     } catch (err: any) {
-      alert(err.message || 'Error al eliminar');
+      console.error(err);
     }
+  };
+
+  // Quitar operación de la semana
+  const handleRemoveOp = async (opId: string) => {
+    if (!confirm('¿Quitar esta operación del programa semanal y devolver al backlog?')) return;
+    try {
+      await api.removeOperacionArauco(opId);
+      await loadProgramacion();
+    } catch (err: any) {
+      alert(err.message || 'Error al remover operación');
+    }
+  };
+
+  // Buscar backlog para modal
+  const openBacklogModal = async () => {
+    setShowAddModal(true);
+    setLoadingBacklog(true);
+    try {
+      const ops = await api.getBacklogOperaciones({
+        sinSemana: 'true',
+        ptoTbjo,
+        search: searchBacklog
+      });
+      setBacklogOps(ops);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingBacklog(false);
+    }
+  };
+
+  const handleSearchBacklog = async (q: string) => {
+    setSearchBacklog(q);
+    setLoadingBacklog(true);
+    try {
+      const ops = await api.getBacklogOperaciones({
+        sinSemana: 'true',
+        ptoTbjo,
+        search: q
+      });
+      setBacklogOps(ops);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingBacklog(false);
+    }
+  };
+
+  const handleAddOpFromBacklog = async (op: any) => {
+    try {
+      await api.saveOperacionArauco({
+        id: op.id,
+        semanaProg: semana,
+        anioProg: anio,
+        hhMiercoles: op.horasEstimadas || 7 // Por defecto asigna en miércoles
+      });
+      setShowAddModal(false);
+      await loadProgramacion();
+    } catch (err: any) {
+      alert(err.message || 'Error al agregar operación');
+    }
+  };
+
+  // Fechas del período (calculadas para el Miércoles a Martes)
+  const getPeriodoFechas = () => {
+    if (!data?.dotacion?.fechaInicio) return '';
+    const fIni = new Date(data.dotacion.fechaInicio);
+    const fFin = new Date(data.dotacion.fechaFin);
+    return `${fIni.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })} al ${fFin.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
   };
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       
-      {/* Encabezado */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase tracking-wider">
-            <CalendarDays className="w-4 h-4" />
-            <span>Dotación & Programación Semanal de Horas Hombre</span>
+      {/* Encabezado Oficial Arauco */}
+      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl border border-slate-800">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-sky-400 text-xs font-bold uppercase tracking-wider">
+              <Building className="w-4 h-4 text-emerald-400" />
+              <span>PC01 Planta Celulosa Puerto Esperanza | Mantenimiento Industrial</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1">
+              Programa Diario Semanal de Mantenimiento ({ptoTbjo})
+            </h1>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 mt-2">
+              <span>Puesto Ejecutor: <strong className="text-sky-300">{ptoTbjo}</strong></span>
+              <span>•</span>
+              <span>Grupo Planificación: <strong className="text-sky-300">{data?.dotacion?.grupoPlanif || 'TA1'}</strong></span>
+              <span>•</span>
+              <span>Período Oficial: <strong className="text-emerald-300">{getPeriodoFechas() || 'Ciclo Miércoles a Martes'}</strong></span>
+            </div>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
-            Tablero de Nivelación de Carga (Semana {semana} - {anio})
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Control de capacidad neta, semaforización de dotación (75-100%) y coincidencia de rubro técnico.
-          </p>
+
+          {/* Selectores de Semana y Botones de Acción */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl p-1 text-xs font-bold">
+              <button
+                onClick={() => setSemana((s) => Math.max(1, s - 1))}
+                className="p-1.5 hover:bg-slate-700 rounded-lg transition"
+                title="Semana anterior"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="px-3 text-sky-300">
+                Semana {semana} ({anio})
+              </span>
+              <button
+                onClick={() => setSemana((s) => Math.min(52, s + 1))}
+                className="p-1.5 hover:bg-slate-700 rounded-lg transition"
+                title="Semana siguiente"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition shadow-sm"
+            >
+              <Printer className="w-4 h-4 text-sky-400" />
+              <span className="hidden sm:inline">Imprimir Formato Arauco</span>
+            </button>
+
+            <button
+              onClick={loadProgramacion}
+              className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition"
+              title="Actualizar datos"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
-        {/* Controles de Semana y Filtro de Rubro */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center bg-white border border-slate-300 rounded-lg shadow-sm">
-            <button
-              onClick={() => setSemana((s) => Math.max(1, s - 1))}
-              className="p-2 hover:bg-slate-100 rounded-l-lg text-slate-600 transition"
-              title="Semana anterior"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="px-3 text-xs font-bold text-slate-800">
-              Semana {semana}
-            </span>
-            <button
-              onClick={() => setSemana((s) => Math.min(52, s + 1))}
-              className="p-2 hover:bg-slate-100 rounded-r-lg text-slate-600 transition"
-              title="Semana siguiente"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+        {/* Notificación de carga exitosa */}
+        {uploadSuccess && (
+          <div className="mt-4 p-3 bg-emerald-950 border border-emerald-700 rounded-xl text-xs text-emerald-200 flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            <span>{uploadSuccess}</span>
           </div>
+        )}
+      </div>
 
-          <div className="flex items-center gap-2">
-            <Filter className="w-4 h-4 text-slate-500" />
-            <select
-              value={rubroFilter}
-              onChange={(e) => setRubroFilter(e.target.value)}
-              className="py-2 px-3 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-sky-500"
-            >
-              <option value="">Todos los Rubros</option>
-              {RUBROS.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
+      {/* Zona Drag & Drop para importar archivo oficial PS...xlsm */}
+      <div
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
+        className="bg-white border-2 border-dashed border-sky-300 hover:border-sky-500 rounded-2xl p-5 text-center transition shadow-sm relative group cursor-pointer"
+      >
+        <input
+          type="file"
+          accept=".xlsm, .xlsx"
+          onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+        />
+        <div className="flex items-center justify-center gap-3 pointer-events-none">
+          <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-md group-hover:scale-105 transition">
+            <UploadCloud className="w-5 h-5" />
           </div>
+          <div className="text-left">
+            <h4 className="font-bold text-xs text-slate-800">
+              ¿Tienes el archivo del programa <span className="text-sky-700">PS{semana}{anio} 340CRR.xlsm</span>?
+            </h4>
+            <p className="text-[11px] text-slate-500">
+              Arrastra y suéltalo aquí para importar al instante todas las operaciones, dotación y horas asignadas.
+            </p>
+          </div>
+          {uploading && (
+            <div className="flex items-center gap-1.5 text-xs font-bold text-sky-700 bg-sky-100 px-3 py-1 rounded-full animate-pulse ml-auto">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>Importando planilla Arauco...</span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Leyenda de Semáforo de Capacidad */}
-      <div className="bg-slate-900 text-white p-4 rounded-xl shadow-md flex flex-wrap items-center justify-between gap-4 text-xs font-medium">
-        <div className="flex items-center gap-2">
-          <span className="font-bold uppercase tracking-wider text-slate-300">Semáforo de Carga:</span>
+      {/* Panel de Control de Dotación y Capacidad Neta Semanal */}
+      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-sky-600" />
+            <h3 className="font-extrabold text-sm text-slate-900">
+              Dotación Diaria & Capacidad Neta de Horas Hombre ({getPeriodoFechas()})
+            </h3>
+          </div>
+          <button
+            onClick={() => {
+              if (editDotacion) handleSaveDotacion();
+              else setEditDotacion(true);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
+              editDotacion
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
+            }`}
+          >
+            {editDotacion ? <Save className="w-3.5 h-3.5" /> : <Wrench className="w-3.5 h-3.5" />}
+            <span>{editDotacion ? 'Guardar Dotación' : 'Modificar Dotación'}</span>
+          </button>
         </div>
-        <div className="flex flex-wrap items-center gap-5">
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-emerald-400"></span>
-            <span>Verde: <strong>75% - 100%</strong> (Nivelado Óptimo)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-amber-400"></span>
-            <span>Amarillo: <strong>&lt; 75%</strong> (Capacidad Ociosa / Libre)</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="w-3 h-3 rounded-full bg-red-400"></span>
-            <span>Rojo: <strong>&gt; 100%</strong> (Sobreasignación Peligrosa)</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Grilla Semanal por Operario */}
-      <div className="space-y-4">
-        {tablero.map((item) => {
-          const { personal, porcentajeOcupacion, horasAsignadasTotales, capacidadDisponibleHoras, estadoSemaforo, asignaciones } = item;
-          const horasBase = (personal.regimenHorario || 9) * 5;
+        {/* Cajas Diarias de Dotación (Ciclo Miércoles a Martes) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+          {DIAS.map((d) => {
+            const formKey = d.key === 'mi' ? 'opMiercoles' :
+                            d.key === 'ju' ? 'opJueves' :
+                            d.key === 'vi' ? 'opViernes' :
+                            d.key === 'sa' ? 'opSabado' :
+                            d.key === 'dom' ? 'opDomingo' :
+                            d.key === 'lu' ? 'opLunes' : 'opMartes';
 
-          const semaforoBg =
-            estadoSemaforo === 'verde'
-              ? 'bg-emerald-500'
-              : estadoSemaforo === 'amarillo'
-              ? 'bg-amber-400'
-              : 'bg-red-500';
+            const numOperarios = (dotacionForm as any)[formKey] ?? 0;
+            const hhDisp = data?.horasDisponibles?.[d.key] ?? (numOperarios * 7);
+            const hhProg = data?.horasProgramadas?.[d.key] ?? 0;
+            const isFinDeSemana = d.key === 'sa' || d.key === 'dom';
 
-          return (
-            <div
-              key={personal.id}
-              className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition"
-            >
-              {/* Header de Operario y Carga */}
-              <div className="bg-slate-50 px-6 py-3.5 border-b border-slate-200 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3.5 h-3.5 rounded-full ${semaforoBg} shadow-sm animate-pulse`}></div>
-                  <div>
-                    <span className="font-extrabold text-sm text-slate-900">{personal.nombre}</span>
-                    <span className="ml-2 text-xs font-semibold text-slate-500 font-mono">({personal.legajo})</span>
-                    <span className="ml-3 px-2 py-0.5 rounded-md text-[11px] font-bold bg-sky-100 text-sky-800">
-                      {personal.especialidad}
-                    </span>
-                  </div>
+            return (
+              <div
+                key={d.key}
+                className={`p-3.5 rounded-xl border transition ${
+                  isFinDeSemana
+                    ? 'bg-slate-50 border-slate-200 opacity-60'
+                    : 'bg-gradient-to-b from-sky-50/50 to-white border-sky-200 shadow-sm'
+                }`}
+              >
+                <div className="flex items-center justify-between text-xs font-bold text-slate-800">
+                  <span>{d.label}</span>
+                  <span className="text-[10px] text-slate-400 font-mono">Día {d.dayIndex + 1}</span>
                 </div>
 
-                <div className="flex items-center gap-4 text-xs font-semibold">
-                  <div>
-                    <span className="text-slate-500">Carga Semanal: </span>
-                    <strong className="text-slate-900">{horasAsignadasTotales}h / {horasBase}h</strong>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="w-24 bg-slate-200 h-2.5 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full ${semaforoBg}`}
-                        style={{ width: `${Math.min(100, porcentajeOcupacion)}%` }}
-                      ></div>
-                    </div>
-                    <span className="font-extrabold text-slate-800">{porcentajeOcupacion}%</span>
-                  </div>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500 font-medium">Operarios:</span>
+                  {editDotacion ? (
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      value={numOperarios}
+                      onChange={(e) =>
+                        setDotacionForm({ ...dotacionForm, [formKey]: Number(e.target.value) })
+                      }
+                      className="w-14 px-1.5 py-0.5 border border-sky-400 rounded text-center text-xs font-bold"
+                    />
+                  ) : (
+                    <span className="font-extrabold text-sm text-slate-900">{numOperarios} op</span>
+                  )}
+                </div>
+
+                <div className="mt-1 pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <span className="text-[10px] text-slate-500 font-semibold">Disponible:</span>
+                  <span className="font-extrabold text-sky-700">{hhDisp} HH</span>
+                </div>
+                <div className="flex items-center justify-between text-xs mt-0.5">
+                  <span className="text-[10px] text-slate-500 font-semibold">Programado:</span>
+                  <span className={`font-extrabold ${hhProg > hhDisp ? 'text-red-600' : 'text-emerald-700'}`}>
+                    {hhProg} HH
+                  </span>
                 </div>
               </div>
+            );
+          })}
+        </div>
 
-              {/* Grilla de Días (Lunes a Viernes) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 p-3">
-                {DIAS.map((dia) => {
-                  const asignacionesDia = asignaciones.filter((a: any) => a.diaSemana === dia);
-                  const totalHorasDia = asignacionesDia.reduce((sum: number, a: any) => sum + a.horasAsignadas, 0);
+        {/* Resumen Global de Carga y Densidad Semanal */}
+        <div className="bg-slate-900 text-white rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-6">
+            <div>
+              <div className="text-[11px] text-slate-400 font-medium">Capacidad Total Semana</div>
+              <div className="text-xl font-extrabold text-white mt-0.5">
+                {data?.horasDisponibles?.total || 266} <span className="text-xs font-normal text-slate-300">HH Objetivo</span>
+              </div>
+            </div>
+            <div className="border-l border-slate-700 pl-6">
+              <div className="text-[11px] text-slate-400 font-medium">Total Programado en OMs</div>
+              <div className="text-xl font-extrabold text-sky-400 mt-0.5">
+                {data?.horasProgramadas?.total || 0} <span className="text-xs font-normal text-slate-300">HH Reales</span>
+              </div>
+            </div>
+          </div>
 
+          {/* Semáforo de Densidad (% de Uso de Recurso) */}
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="text-[11px] text-slate-400 font-medium">Densidad Semanal (Arauco)</div>
+              <div className="text-xs text-slate-300">Nivelación de Recurso</div>
+            </div>
+            <div className={`px-4 py-2 rounded-xl text-lg font-extrabold border ${
+              (data?.densidad?.total || 0) >= 90 && (data?.densidad?.total || 0) <= 105
+                ? 'bg-emerald-950 text-emerald-400 border-emerald-600'
+                : (data?.densidad?.total || 0) < 90
+                ? 'bg-amber-950 text-amber-400 border-amber-600'
+                : 'bg-red-950 text-red-400 border-red-600'
+            }`}>
+              {data?.densidad?.total || 0}%
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Grilla Oficial de Operaciones Programadas */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-0">
+        <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50">
+          <div>
+            <h3 className="font-extrabold text-sm text-slate-900">
+              Operaciones Programadas en Semana {semana} (Detalle Diario)
+            </h3>
+            <p className="text-[11px] text-slate-500">
+              Distribución de Horas Hombre cargadas desde Órdenes SAP y operaciones IW37N
+            </p>
+          </div>
+          <button
+            onClick={openBacklogModal}
+            className="flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition shadow-sm self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Añadir Operación desde IW37N</span>
+          </button>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold uppercase tracking-wider text-[11px]">
+                <th className="py-3 px-3">Orden (OT)</th>
+                <th className="py-3 px-2 text-center">Op.</th>
+                <th className="py-3 px-3">Ubicación Técnica</th>
+                <th className="py-3 px-4">Descripción Operación</th>
+                <th className="py-3 px-2 text-center bg-sky-50/60">Mi</th>
+                <th className="py-3 px-2 text-center bg-sky-50/60">Ju</th>
+                <th className="py-3 px-2 text-center bg-sky-50/60">Vi</th>
+                <th className="py-3 px-2 text-center bg-slate-100/80">Sa</th>
+                <th className="py-3 px-2 text-center bg-slate-100/80">Do</th>
+                <th className="py-3 px-2 text-center bg-sky-50/60">Lu</th>
+                <th className="py-3 px-2 text-center bg-sky-50/60">Ma</th>
+                <th className="py-3 px-3 text-center bg-slate-200/80 font-bold">Total HH</th>
+                <th className="py-3 px-2 text-center">Quitar</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 text-slate-700">
+              {(!data?.operaciones || data.operaciones.length === 0) ? (
+                <tr>
+                  <td colSpan={13} className="py-12 text-center text-slate-400">
+                    No hay operaciones programadas para esta semana. Arrastra el archivo <strong className="text-slate-600">PS{semana}{anio} 340CRR.xlsm</strong> o haz clic en "+ Añadir Operación desde IW37N".
+                  </td>
+                </tr>
+              ) : (
+                data.operaciones.map((op: any) => (
+                  <tr key={op.id} className="hover:bg-slate-50 transition">
+                    <td className="py-2.5 px-3 font-extrabold text-sky-700 font-mono">
+                      {op.numeroOrden}
+                    </td>
+                    <td className="py-2.5 px-2 text-center font-bold text-slate-500 font-mono">
+                      {op.numeroOperacion}
+                    </td>
+                    <td className="py-2.5 px-3 text-[11px] font-mono text-slate-700 truncate max-w-[140px]" title={op.ubicacionTecnica}>
+                      {op.ubicacionTecnica || 'AR-PLANTA-CRR'}
+                    </td>
+                    <td className="py-2.5 px-4 font-medium text-slate-900 max-w-xs truncate" title={op.textoOperacion}>
+                      {op.textoOperacion}
+                    </td>
+
+                    {/* Inputs de Horas Diarias */}
+                    {DIAS.map((d) => {
+                      const propKey = d.key === 'mi' ? 'hhMiercoles' :
+                                      d.key === 'ju' ? 'hhJueves' :
+                                      d.key === 'vi' ? 'hhViernes' :
+                                      d.key === 'sa' ? 'hhSabado' :
+                                      d.key === 'dom' ? 'hhDomingo' :
+                                      d.key === 'lu' ? 'hhLunes' : 'hhMartes';
+                      const val = op[propKey] || 0;
+
+                      return (
+                        <td key={d.key} className="py-2 px-1 text-center">
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            max="30"
+                            defaultValue={val > 0 ? val : ''}
+                            placeholder="-"
+                            onBlur={(e) => {
+                              const newH = parseFloat(e.target.value) || 0;
+                              if (newH !== val) handleSaveOperacionHours(op, d.key, newH);
+                            }}
+                            className={`w-12 py-1 text-center rounded border font-bold text-xs transition ${
+                              val > 0
+                                ? 'bg-sky-50 border-sky-400 text-sky-900 font-extrabold'
+                                : 'bg-transparent border-transparent hover:border-slate-300 text-slate-400'
+                            }`}
+                          />
+                        </td>
+                      );
+                    })}
+
+                    <td className="py-2.5 px-3 text-center font-extrabold text-slate-900 bg-slate-50">
+                      {op.hhTotalProgramado}
+                    </td>
+
+                    <td className="py-2.5 px-2 text-center">
+                      <button
+                        onClick={() => handleRemoveOp(op.id)}
+                        className="p-1 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded transition"
+                        title="Quitar operación"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+
+            {/* Filas Oficiales de Nivelación y Densidad al Pie */}
+            <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-extrabold text-xs">
+              <tr className="border-b border-slate-200">
+                <td colSpan={4} className="py-3 px-4 text-right text-slate-700 uppercase tracking-wider text-[11px]">
+                  Total HH disponibles por día
+                </td>
+                {DIAS.map((d) => (
+                  <td key={d.key} className="py-3 px-1 text-center text-slate-800">
+                    {data?.horasDisponibles?.[d.key] ?? 0}
+                  </td>
+                ))}
+                <td className="py-3 px-3 text-center text-slate-900 bg-slate-200">
+                  {data?.horasDisponibles?.total ?? 266}
+                </td>
+                <td></td>
+              </tr>
+
+              <tr className="border-b border-slate-200">
+                <td colSpan={4} className="py-3 px-4 text-right text-sky-800 uppercase tracking-wider text-[11px]">
+                  Total HH programadas por día
+                </td>
+                {DIAS.map((d) => (
+                  <td key={d.key} className="py-3 px-1 text-center text-sky-700">
+                    {data?.horasProgramadas?.[d.key] ?? 0}
+                  </td>
+                ))}
+                <td className="py-3 px-3 text-center text-sky-900 bg-sky-100">
+                  {data?.horasProgramadas?.total ?? 0}
+                </td>
+                <td></td>
+              </tr>
+
+              <tr className="bg-slate-900 text-white">
+                <td colSpan={4} className="py-3 px-4 text-right text-emerald-400 uppercase tracking-wider text-[11px]">
+                  Densidad (% de uso del recurso)
+                </td>
+                {DIAS.map((d) => {
+                  const dens = data?.densidad?.[d.key];
                   return (
-                    <div key={dia} className="p-2.5 space-y-2">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
-                        <span className="text-xs font-bold text-slate-700">{dia}</span>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] font-bold text-slate-400">{totalHorasDia}h</span>
-                          <button
-                            onClick={() => handleOpenAssignModal(personal, dia)}
-                            className="p-1 hover:bg-sky-50 text-sky-600 rounded transition"
-                            title={`Asignar tarea el ${dia}`}
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Tareas del día */}
-                      <div className="space-y-1.5 min-h-[70px]">
-                        {asignacionesDia.length === 0 ? (
-                          <div className="text-[10px] text-slate-400 italic text-center py-4">
-                            Disponible
-                          </div>
-                        ) : (
-                          asignacionesDia.map((asig: any) => (
-                            <div
-                              key={asig.id}
-                              className="bg-slate-50 hover:bg-sky-50 border border-slate-200 hover:border-sky-300 p-2 rounded-lg text-xs transition group relative"
-                            >
-                              <div className="flex items-center justify-between font-extrabold text-sky-900 text-[11px]">
-                                <span>Aviso {asig.aviso?.numeroAviso || '340CRR'}</span>
-                                <span className="text-[10px] text-slate-500 font-bold bg-white px-1.5 py-0.5 rounded border border-slate-200">
-                                  {asig.horasAsignadas}h
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-slate-600 line-clamp-1 mt-0.5">
-                                {asig.descripcionTarea || asig.aviso?.descripcion}
-                              </p>
-                              
-                              <button
-                                onClick={() => handleEliminarAsignacion(asig.id)}
-                                className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 absolute top-1 right-1 p-1 transition"
-                                title="Eliminar"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
-
-                    </div>
+                    <td key={d.key} className="py-3 px-1 text-center font-extrabold text-emerald-400">
+                      {dens !== undefined && dens > 0 ? `${dens}%` : '-'}
+                    </td>
                   );
                 })}
-              </div>
-
-            </div>
-          );
-        })}
+                <td className="py-3 px-3 text-center text-emerald-400 bg-slate-950 font-extrabold text-sm">
+                  {data?.densidad?.total ?? 0}%
+                </td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
 
-      {/* Modal Asignar Tarea */}
-      {showAssignModal && selectedOperario && (
+      {/* Modal para agregar operaciones desde Backlog IW37N */}
+      {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 space-y-4">
-            <h3 className="font-extrabold text-base text-slate-900">
-              Asignar Tarea a {selectedOperario.nombre}
-            </h3>
-            <p className="text-xs text-slate-500">
-              Día: <strong className="text-slate-800">{selectedDia}</strong> | Especialidad: <strong className="text-sky-700">{selectedOperario.especialidad}</strong>
-            </p>
-
-            <form onSubmit={handleGuardarAsignacion} className="space-y-3 text-xs">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Aviso SAP a Ejecutar</label>
-                <select
-                  value={selectedAvisoId}
-                  onChange={(e) => setSelectedAvisoId(e.target.value)}
-                  className="w-full p-2 border border-slate-300 rounded-lg font-medium"
-                >
-                  {avisos.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      #{a.numeroAviso} {a.numeroOrden ? `[OT: ${a.numeroOrden}]` : ''} {a.revision ? `[Rev: ${a.revision}]` : ''} - {a.descripcion.substring(0, 45)}... ({a.rubro || 'General'})
-                    </option>
-                  ))}
-                </select>
+                <h3 className="font-extrabold text-base text-slate-900">
+                  Seleccionar Operación desde Backlog IW37N
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Operaciones disponibles en el puesto {ptoTbjo} con HH estimadas en SAP
+                </p>
               </div>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Horas Asignadas para la Jornada</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="9"
-                  required
-                  value={horas}
-                  onChange={(e) => setHoras(Number(e.target.value))}
-                  className="w-full p-2 border border-slate-300 rounded-lg font-bold"
-                />
-              </div>
+            {/* Buscador */}
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={searchBacklog}
+                onChange={(e) => handleSearchBacklog(e.target.value)}
+                placeholder="Buscar por N° Orden, Operación o Descripción..."
+                className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500"
+              />
+            </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Descripción de la Tarea / Alcance</label>
-                <textarea
-                  rows={2}
-                  value={tareaDesc}
-                  onChange={(e) => setTareaDesc(e.target.value)}
-                  placeholder="Ej: Montaje de andamio Sa 2 y preparación de superficie..."
-                  className="w-full p-2 border border-slate-300 rounded-lg"
-                />
-              </div>
+            {/* Lista de operaciones en backlog */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 divide-y divide-slate-100">
+              {loadingBacklog ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  Cargando operaciones del backlog...
+                </div>
+              ) : backlogOps.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  No se encontraron operaciones pendientes en el backlog.
+                </div>
+              ) : (
+                backlogOps.map((op) => (
+                  <div
+                    key={op.id}
+                    className="pt-2 flex items-center justify-between gap-3 hover:bg-slate-50 p-2 rounded-lg transition"
+                  >
+                    <div className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-extrabold text-sky-700">OT: {op.numeroOrden}</span>
+                        <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 text-slate-600">
+                          Op: {op.numeroOperacion}
+                        </span>
+                        {op.revision && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 text-purple-800">
+                            {op.revision}
+                          </span>
+                        )}
+                      </div>
+                      <div className="font-medium text-slate-900 mt-0.5">{op.textoOperacion}</div>
+                      <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        {op.ubicacionTecnica} | Trabajo SAP: <strong>{op.horasEstimadas} HH</strong>
+                      </div>
+                    </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAssignModal(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg text-slate-600 font-bold hover:bg-slate-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold shadow"
-                >
-                  Asignar Horas
-                </button>
-              </div>
-            </form>
+                    <button
+                      onClick={() => handleAddOpFromBacklog(op)}
+                      className="px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition flex-shrink-0"
+                    >
+                      + Programar
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex justify-end">
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50"
+              >
+                Cerrar
+              </button>
+            </div>
           </div>
         </div>
       )}

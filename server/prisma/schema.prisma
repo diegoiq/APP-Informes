@@ -72,8 +72,72 @@ model Aviso {
 
   contactosTriaje       TriajeContacto[]
   programaciones        ProgramacionSemanal[]
+  operaciones           OperacionOM[]
 
   @@map("avisos")
+}
+
+// =====================================================================
+// 3.1 OPERACIONES DE ÓRDENES (IW37N) Y PROGRAMACIÓN SEMANAL ARAUCO
+// =====================================================================
+model OperacionOM {
+  id                String   @id @default(uuid())
+  numeroOrden       String   @map("numero_orden")
+  numeroOperacion   String   @map("numero_operacion")
+  textoOperacion    String   @map("texto_operacion")
+  ubicacionTecnica  String?  @map("ubicacion_tecnica")
+  ptoTbjo           String?  @map("pto_tbjo")
+  revision          String?
+  horasEstimadas    Float    @default(0) @map("horas_estimadas")
+  statusSistema     String?  @map("status_sistema")
+  avisoId           String?  @map("aviso_id")
+  aviso             Aviso?   @relation(fields: [avisoId], references: [id], onDelete: SetNull)
+
+  // Asignación en Programa Diario Semanal Arauco (Ciclo Miércoles a Martes)
+  semanaProg        Int?     @map("semana_prog")
+  anioProg          Int?     @map("anio_prog")
+  hhMiercoles       Float    @default(0) @map("hh_miercoles")
+  hhJueves          Float    @default(0) @map("hh_jueves")
+  hhViernes         Float    @default(0) @map("hh_viernes")
+  hhSabado          Float    @default(0) @map("hh_sabado")
+  hhDomingo         Float    @default(0) @map("hh_domingo")
+  hhLunes           Float    @default(0) @map("hh_lunes")
+  hhMartes          Float    @default(0) @map("hh_martes")
+  hhTotalProgramado Float    @default(0) @map("hh_total_programado")
+
+  creadoEn          DateTime @default(now()) @map("creado_en")
+  actualizadoEn     DateTime @updatedAt @map("actualizado_en")
+
+  @@unique([numeroOrden, numeroOperacion])
+  @@map("operaciones_om")
+}
+
+model DotacionSemanalArauco {
+  id              String   @id @default(uuid())
+  semana          Int
+  anio            Int
+  ptoTbjo         String   @default("340CRR") @map("pto_tbjo")
+  grupoPlanif     String   @default("TA1") @map("grupo_planif")
+  fechaInicio     DateTime @map("fecha_inicio")
+  fechaFin        DateTime @map("fecha_fin")
+  
+  // Cantidad de operarios por día
+  opMiercoles     Int      @default(7) @map("op_miercoles")
+  opJueves        Int      @default(8) @map("op_jueves")
+  opViernes       Int      @default(8) @map("op_viernes")
+  opSabado        Int      @default(0) @map("op_sabado")
+  opDomingo       Int      @default(0) @map("op_domingo")
+  opLunes         Int      @default(7) @map("op_lunes")
+  opMartes        Int      @default(8) @map("op_martes")
+  
+  horasJornada    Float    @default(7) @map("horas_jornada")
+  comentario      String?
+
+  creadoEn        DateTime @default(now()) @map("creado_en")
+  actualizadoEn   DateTime @updatedAt @map("actualizado_en")
+
+  @@unique([semana, anio, ptoTbjo])
+  @@map("dotacion_semanal_arauco")
 }
 
 // =====================================================================

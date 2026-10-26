@@ -139,6 +139,7 @@ export interface ExcelIngestionSummary {
   avisosAbiertos: number;
   avisosCerrados: number;
   avisosConOM: number;
+  totalOperacionesIW37N?: number;
   insertados: number;
   actualizados: number;
   filtrados340CRR: number;

@@ -180,6 +180,45 @@ class ApiService {
     });
   }
 
+  // Programa Diario Semanal Oficial Arauco (PS432026 / IW37N)
+  public getProgramacionArauco(semana: number, anio: number, ptoTbjo: string = '340CRR') {
+    return this.request(`/programacion/arauco?semana=${semana}&anio=${anio}&ptoTbjo=${ptoTbjo}`);
+  }
+
+  public uploadPSFile(file: File) {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.request('/programacion/arauco/upload', {
+      method: 'POST',
+      body: formData
+    });
+  }
+
+  public updateDotacionArauco(data: any) {
+    return this.request('/programacion/arauco/dotacion', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public saveOperacionArauco(data: any) {
+    return this.request('/programacion/arauco/operacion', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public removeOperacionArauco(id: string) {
+    return this.request(`/programacion/arauco/operacion/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  public getBacklogOperaciones(params?: Record<string, string>) {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return this.request(`/operaciones/backlog${query}`);
+  }
+
   // Obras y Libro Diario
   public getObras() {
     return this.request('/obras');

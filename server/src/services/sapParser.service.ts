@@ -61,6 +61,7 @@ export class SapParserService {
       avisosAbiertos: 0,
       avisosCerrados: 0,
       avisosConOM: 0,
+      totalOperacionesIW37N: 0,
       insertados: 0,
       actualizados: 0,
       filtrados340CRR: 0,
@@ -73,12 +74,14 @@ export class SapParserService {
     let sheetAvisos: ExcelJS.Worksheet | undefined;
     let sheetOM: ExcelJS.Worksheet | undefined;
     let sheetAnalisis: ExcelJS.Worksheet | undefined;
+    let sheetIW37N: ExcelJS.Worksheet | undefined;
 
     workbook.eachSheet((ws) => {
       const name = ws.name.toLowerCase().trim();
       if (name.includes('aviso')) sheetAvisos = ws;
       else if (name === 'om' || name.includes('orden')) sheetOM = ws;
       else if (name.includes('anali')) sheetAnalisis = ws;
+      else if (name.includes('iw37n') || name.includes('om-hh')) sheetIW37N = ws;
     });
 
     // Fallbacks si las hojas tienen nombres por defecto
@@ -367,6 +370,65 @@ export class SapParserService {
         }
       } catch (err: any) {
         summary.errores.push(`Aviso ${item.numeroAviso}: ${err.message || String(err)}`);
+      }
+    }
+
+    // 6. Procesar Hoja 'OM-HH-IW37N' si existe (Operaciones y Horas Hombre estimadas de SAP)
+    if (sheetIW37N) {
+      try {
+        let iwHeaders: Record<string, number> = {};
+        sheetIW37N.getRow(1).eachCell((cell, colNumber) => {
+          const norm = normalizeHeader(cell.value);
+          if (norm) iwHeaders[norm] = colNumber;
+        });
+
+        const getVal = (row: ExcelJS.Row, keys: string[]) => {
+          for (const k of keys) {
+            const col = iwHeaders[k];
+            if (col) {
+              const val = row.getCell(col).value;
+              if (val !== null && val !== undefined) return val;
+            }
+          }
+          return undefined;
+        };
+
+        const opsToInsert: any[] = [];
+        sheetIW37N.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return;
+          const orden = parseCellString(getVal(row, ['orden', 'norden', 'numeroorden']));
+          const operacion = parseCellString(getVal(row, ['operacion', 'noperacion', 'oper'])) || '0010';
+          if (!orden) return;
+
+          const ptoTbjo = parseCellString(getVal(row, ['ptotbjooperacion', 'ptotbjo', 'ptotbjoresponsable']));
+          const revision = parseCellString(getVal(row, ['revision', 'rev']));
+          const textoOperacion = parseCellString(getVal(row, ['textobreveoperacion', 'textobreve', 'descripcion'])) || 'Operación SAP';
+          const ubicacionTecnica = parseCellString(getVal(row, ['ubicaciontecnica', 'ubctecnica']));
+          const trabajo = parseCellNumber(getVal(row, ['trabajo', 'hh', 'horastrabajo'])) || 0;
+          const statusSistema = parseCellString(getVal(row, ['statussistemaop', 'status', 'estadosistema']));
+
+          opsToInsert.push({
+            numeroOrden: orden,
+            numeroOperacion: operacion,
+            textoOperacion,
+            ubicacionTecnica: ubicacionTecnica || undefined,
+            ptoTbjo: ptoTbjo || '340CRR',
+            revision: revision || undefined,
+            horasEstimadas: trabajo,
+            statusSistema: statusSistema || undefined
+          });
+        });
+
+        for (let i = 0; i < opsToInsert.length; i += 500) {
+          const chunk = opsToInsert.slice(i, i + 500);
+          await prisma.operacionOM.createMany({
+            data: chunk,
+            skipDuplicates: true
+          });
+        }
+        summary.totalOperacionesIW37N = opsToInsert.length;
+      } catch (errIW: any) {
+        summary.errores.push(`Error en hoja IW37N: ${errIW.message || String(errIW)}`);
       }
     }
 

@@ -142,17 +142,17 @@ export const TriajeOperativo: React.FC = () => {
       <div>
         <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase tracking-wider">
           <Filter className="w-4 h-4" />
-          <span>Triaje Operativo & Gestión de Prioridad Real</span>
+          <span>Cartera Viva & Backlog Operativo de Avisos y OMs</span>
         </div>
         <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
-          Nivelación de Requerimientos vs. Inflación SAP
+          Bolsa de Trabajo SAP PM & Gestión de Prioridades Técnicas
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          Acuerdos formales con el solicitante, gestión de insistencias por correo y priorización real técnica.
+          Filtrado de requerimientos activos, revisión de operaciones IW37N con HH y preparación de órdenes para el programa semanal.
         </p>
       </div>
 
-      {/* Grid Principal: Lista a la izquierda, Detalle y Triaje a la derecha */}
+      {/* Grid Principal: Lista a la izquierda, Detalle y Backlog a la derecha */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Columna Izquierda: Lista de Avisos */}
@@ -162,10 +162,10 @@ export const TriajeOperativo: React.FC = () => {
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-bold text-slate-800 text-xs uppercase tracking-wider">
-                {filtroEstado === 'abiertos' ? '🟢 Avisos Abiertos en Triaje' : filtroEstado === 'cerrados' ? '⚪ Histórico Cerrados (MECE)' : '📋 Todos los Avisos'}
+                {filtroEstado === 'abiertos' ? '🟢 Cartera Abierta / Backlog' : filtroEstado === 'cerrados' ? '⚪ Histórico Cerrados (MECE)' : '📋 Toda la Cartera'}
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-sky-100 text-sky-800 font-extrabold text-xs">
-                {avisos.length} avisos
+                {avisos.length} registros
               </span>
             </div>
 
