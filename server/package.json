@@ -10,7 +10,9 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma db push",
     "prisma:seed": "tsx src/database/seed.ts",
-    "generate:sample-excel": "tsx src/scripts/generateSampleExcel.ts"
+    "generate:sample-excel": "tsx src/scripts/generateSampleExcel.ts",
+    "db:use-sqlite": "node -e \"const fs=require('fs'); let c=fs.readFileSync('prisma/schema.prisma','utf8'); fs.writeFileSync('prisma/schema.prisma', c.replace(/provider\\s*=\\s*\\\"postgresql\\\"/, 'provider = \\\"sqlite\\\"')); console.log('Prisma configurado para SQLite');\"",
+    "db:use-postgres": "node -e \"const fs=require('fs'); let c=fs.readFileSync('prisma/schema.prisma','utf8'); fs.writeFileSync('prisma/schema.prisma', c.replace(/provider\\s*=\\s*\\\"sqlite\\\"/, 'provider = \\\"postgresql\\\"')); console.log('Prisma configurado para PostgreSQL');\""
   },
   "dependencies": {
     "@app-informes/shared": "*",

@@ -1,0 +1,45 @@
+# =====================================================================
+# RENDER BLUEPRINT CONFIGURATION (APP-INFORMES)
+# https://render.com/docs/blueprint-spec
+# =====================================================================
+
+databases:
+  # Base de Datos PostgreSQL Gestionada (Capa Gratuita de Render)
+  - name: app-informes-db
+    databaseName: app_informes
+    user: postgres
+    plan: free
+    region: oregon
+
+services:
+  # Plataforma Web Unificada (Backend API + Frontend React SPA)
+  - type: web
+    name: app-informes
+    runtime: node
+    plan: free
+    region: oregon
+    branch: main
+    # 1. Instala dependencias del monorepo
+    # 2. Compila shared, server y client (React Vite)
+    # 3. Sincroniza las tablas de PostgreSQL con Prisma
+    # 4. Inicializa los usuarios base (2 de 5 cupos) y dotación
+    buildCommand: npm install && npm run build && npx prisma db push --schema=server/prisma/schema.prisma && npx tsx server/src/database/seed.ts
+    # Inicia el servidor Node.js que expone la API y sirve la SPA de React
+    startCommand: node server/dist/index.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: app-informes-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 8h
+      - key: MAX_REGISTERED_USERS
+        value: 5
+      - key: CLIENT_URL
+        value: https://app-informes.onrender.com

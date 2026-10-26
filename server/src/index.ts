@@ -34,6 +34,17 @@ app.get('/api/health', (req, res) => {
 // Rutas API Principales
 app.use('/api', router);
 
+// Servir frontend compilado en producción
+import fs from 'fs';
+const clientDistPath = path.resolve(__dirname, '../../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  app.use(express.static(clientDistPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
+
 // Iniciar Servidor
 app.listen(PORT, () => {
   console.log(`====================================================`);
