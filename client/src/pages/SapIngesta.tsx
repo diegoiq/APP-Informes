@@ -99,7 +99,7 @@ export const SapIngesta: React.FC = () => {
 
         <div className="flex items-center gap-3">
           <a
-            href="http://localhost:4000/api/sap/sample-file"
+            href="/api/sap/sample-file"
             download="Panel-Avisos-OM.xlsx"
             className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 rounded-lg text-xs font-semibold shadow-sm transition"
           >

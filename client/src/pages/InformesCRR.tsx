@@ -222,7 +222,7 @@ export const InformesCRR: React.FC = () => {
               {/* Botón Imprimir / Ver Informe Formal HTML */}
               <div className="pt-4 border-t border-slate-100">
                 <a
-                  href={`http://localhost:4000/api/informes/${inf.id}/export-html`}
+                  href={`/api/informes/${inf.id}/export-html`}
                   target="_blank"
                   rel="noreferrer"
                   className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-sm"
