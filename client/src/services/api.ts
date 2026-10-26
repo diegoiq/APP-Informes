@@ -104,14 +104,56 @@ class ApiService {
   }
 
   // Personal y Programación
-  public getPersonal() {
-    return this.request('/personal');
+  public getPersonal(params?: Record<string, string>) {
+    const query = params ? `?${new URLSearchParams(params).toString()}` : '';
+    return this.request(`/personal${query}`);
   }
 
   public createPersonal(data: any) {
     return this.request('/personal', {
       method: 'POST',
       body: JSON.stringify(data)
+    });
+  }
+
+  public bulkCreatePersonal(operarios: any[]) {
+    return this.request('/personal/bulk', {
+      method: 'POST',
+      body: JSON.stringify({ operarios })
+    });
+  }
+
+  public updatePersonal(id: string, data: any) {
+    return this.request(`/personal/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public deletePersonal(id: string) {
+    return this.request(`/personal/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  public registrarAusencia(personalId: string, data: any) {
+    return this.request(`/personal/${personalId}/ausencias`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public eliminarAusencia(id: string) {
+    return this.request(`/personal/ausencias/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // Administración y Limpieza
+  public cleanDemoData(options?: any) {
+    return this.request('/admin/clean-demo', {
+      method: 'POST',
+      body: JSON.stringify(options || {})
     });
   }
 

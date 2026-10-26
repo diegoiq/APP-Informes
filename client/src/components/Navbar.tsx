@@ -25,6 +25,7 @@ export const Navbar: React.FC = () => {
   const navItems = [
     { to: '/sap', label: 'Ingesta SAP', icon: FileSpreadsheet },
     { to: '/triaje', label: 'Triaje Operativo', icon: Filter },
+    { to: '/personal', label: 'Dotación', icon: Users },
     { to: '/programacion', label: 'Programación HH', icon: CalendarDays },
     { to: '/obras', label: 'Libro Diario', icon: BookOpen },
     { to: '/informes', label: 'Informes CRR', icon: FileText },

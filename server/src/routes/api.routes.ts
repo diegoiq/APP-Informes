@@ -6,6 +6,7 @@ import { TriajeController } from '../controllers/triaje.controller';
 import { PersonalController } from '../controllers/personal.controller';
 import { ObrasController } from '../controllers/obras.controller';
 import { InformesController } from '../controllers/informes.controller';
+import { AdminController } from '../controllers/admin.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -31,10 +32,15 @@ router.patch('/avisos/:id', authMiddleware as any, AvisosController.updateFieldD
 router.post('/triaje/:avisoId/contacto', authMiddleware as any, TriajeController.registrarContacto as any);
 router.get('/triaje/:avisoId/plantilla-respuesta', TriajeController.generarPlantillaRespuesta);
 
-// 5. DOTACIÓN Y PROGRAMACIÓN SEMANAL DE HH
+// 5. DOTACIÓN, PERSONAL Y PROGRAMACIÓN SEMANAL DE HH
 router.get('/personal', PersonalController.list);
 router.post('/personal', authMiddleware as any, PersonalController.create as any);
+router.post('/personal/bulk', authMiddleware as any, PersonalController.bulkCreate as any);
+router.put('/personal/:id', authMiddleware as any, PersonalController.update as any);
+router.delete('/personal/:id', authMiddleware as any, PersonalController.delete as any);
 router.post('/personal/:personalId/ausencias', authMiddleware as any, PersonalController.registrarAusencia as any);
+router.delete('/personal/ausencias/:id', authMiddleware as any, PersonalController.eliminarAusencia as any);
+
 router.get('/programacion', PersonalController.getProgramacionSemanal);
 router.post('/programacion/asignacion', authMiddleware as any, PersonalController.guardarAsignacion as any);
 router.delete('/programacion/asignacion/:id', authMiddleware as any, PersonalController.eliminarAsignacion as any);
@@ -51,5 +57,8 @@ router.get('/informes', InformesController.list);
 router.get('/informes/:id', InformesController.getById);
 router.get('/informes/:id/export-html', InformesController.exportHTML);
 router.post('/informes', authMiddleware as any, InformesController.create as any);
+
+// 8. ADMINISTRACIÓN Y LIMPIEZA
+router.post('/admin/clean-demo', authMiddleware as any, AdminController.cleanDemoData as any);
 
 export default router;

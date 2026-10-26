@@ -132,31 +132,6 @@ export const Login: React.FC = () => {
             </button>
           </form>
 
-          {/* Acceso Rápido Demo */}
-          <div className="mt-6 pt-5 border-t border-slate-800">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2.5 text-center">
-              Acceso Rápido Usuarios Precargados
-            </span>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('admin@arauco-crr.cl', 'admin123')}
-                className="p-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex flex-col items-center text-center transition"
-              >
-                <span className="font-semibold text-sky-400">Admin</span>
-                <span className="text-[10px] text-slate-400">admin@arauco-crr.cl</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('supervisor@arauco-crr.cl', 'sup123')}
-                className="p-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 flex flex-col items-center text-center transition"
-              >
-                <span className="font-semibold text-emerald-400">Supervisor</span>
-                <span className="text-[10px] text-slate-400">supervisor@arauco-crr.cl</span>
-              </button>
-            </div>
-          </div>
-
           {/* Enlace a Registro */}
           <div className="mt-5 text-center">
             <Link

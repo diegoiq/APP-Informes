@@ -10,6 +10,7 @@ import TriajeOperativo from './pages/TriajeOperativo';
 import ProgramacionSemanal from './pages/ProgramacionSemanal';
 import LibroDiarioObra from './pages/LibroDiarioObra';
 import InformesCRR from './pages/InformesCRR';
+import GestionPersonal from './pages/GestionPersonal';
 
 const AppLayout: React.FC = () => {
   return (
@@ -43,6 +44,7 @@ export const App: React.FC = () => {
               <Route path="/" element={<Navigate to="/sap" replace />} />
               <Route path="/sap" element={<SapIngesta />} />
               <Route path="/triaje" element={<TriajeOperativo />} />
+              <Route path="/personal" element={<GestionPersonal />} />
               <Route path="/programacion" element={<ProgramacionSemanal />} />
               <Route path="/obras" element={<LibroDiarioObra />} />
               <Route path="/informes" element={<InformesCRR />} />
