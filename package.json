@@ -1,0 +1,37 @@
+{
+  "name": "app-informes-monorepo",
+  "version": "1.0.0",
+  "description": "Plataforma integral de gestión operativa, triaje SAP, programación semanal y generación de informes técnicos CRR",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n \"SERVER,CLIENT\" -c \"blue,green\" \"npm run dev --workspace=server\" \"npm run dev --workspace=client\"",
+    "dev:server": "npm run dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build": "npm run build --workspace=shared && npm run build --workspace=server && npm run build --workspace=client",
+    "build:shared": "npm run build --workspace=shared",
+    "build:server": "npm run build --workspace=server",
+    "build:client": "npm run build --workspace=client",
+    "prisma:generate": "npm run prisma:generate --workspace=server",
+    "prisma:migrate": "npm run prisma:migrate --workspace=server",
+    "prisma:seed": "npm run prisma:seed --workspace=server",
+    "generate:sample-excel": "npm run generate:sample-excel --workspace=server"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "sap",
+    "crr",
+    "informes",
+    "triaje",
+    "programacion-semanal",
+    "libro-diario"
+  ],
+  "author": "APP-Informes Team",
+  "license": "ISC"
+}

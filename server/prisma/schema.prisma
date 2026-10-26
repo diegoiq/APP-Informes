@@ -1,0 +1,244 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// =====================================================================
+// 2. AUTENTICACIÓN Y USUARIOS (RESTRICCIÓN MÁXIMO 5 USUARIOS)
+// =====================================================================
+model Usuario {
+  id           String   @id @default(uuid())
+  nombre       String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  rol          String   @default("programador") // 'admin', 'supervisor', 'programador'
+  activo       Boolean  @default(true)
+  creadoEn     DateTime @default(now()) @map("creado_en")
+
+  // Relaciones
+  librosSupervisados   LibroDiario[] @relation("SupervisorLibroDiario")
+  informesElaborados   InformeCRR[]  @relation("ResponsableInforme")
+
+  @@map("usuarios")
+}
+
+// =====================================================================
+// 3. INGESTA SAP: AVISOS, ÓRDENES Y TAXONOMÍA OPERATIVA
+// =====================================================================
+model Aviso {
+  id                    String    @id @default(uuid())
+  numeroAviso           String    @unique @map("numero_aviso")
+  fechaNotificacion     DateTime? @map("fecha_notificacion")
+  descripcion           String
+  numeroOrden           String?   @map("numero_orden")
+  estadoSistema         String    @map("estado_sistema") // ej: MEAB, etc.
+  autor                 String?
+  efecto                String?
+  prioridadSap          String?   @map("prioridad_sap")
+
+  // Cruce relacional Hoja OM
+  ptoTbjoResponsable    String?   @map("pto_tbjo_responsable") // Filtro principal: 340CRR
+  revision              String?   // ej: PS502026
+  ubicacionTecnica      String?   @map("ubicacion_tecnica")
+  denominacionUbicacion String?   @map("denominacion_ubicacion")
+  claseOrden            String?   @map("clase_orden") // ZAM, ZME
+  costesTotReales       Float?    @map("costes_tot_reales")
+  areaEmpresa           String?   @map("area_empresa")
+  fechaInicioExtrema    DateTime? @map("fecha_inicio_extrema")
+  fechaFinExtrema       DateTime? @map("fecha_fin_extrema")
+  fechaInicioReal       DateTime? @map("fecha_inicio_real")
+  fechaRealFin          DateTime? @map("fecha_real_fin")
+
+  // Hoja Analisis (Taxonomía operativa nativa)
+  rubro                 String?   // Mantenimiento General, Pintura/Aislación, Civil, Soldador, etc.
+  tipoRiesgo            String?   @map("tipo_riesgo") // Interacción vial, Daño estructural civil, etc.
+  tipoCondicionFinal    String?   @map("tipo_condicion_final") // CS-Protecciones, CS-Pintura, CS-Loseta, etc.
+  efectoAnalisis        String?   @map("efecto_analisis") // Seguridad, Limitación de producción, etc.
+  faseAvance            String?   @map("fase_avance") // 1. Planificación, 2. En Ejecución, 3. Finalizada
+
+  // Triaje y Datos de Campo protegidos de sobreescritura SAP
+  prioridadRealAcordada Int?      @map("prioridad_real_acordada") // 1 a 4
+  contadorInsistencias  Int       @default(0) @map("contador_insistencias")
+  notasCampo            String?   @map("notas_campo")
+  horasRealesIncurridas Float?    @map("horas_reales_incurridas")
+  asignadoAId           String?   @map("asignado_a_id")
+
+  creadoEn              DateTime  @default(now()) @map("creado_en")
+  actualizadoEn         DateTime  @updatedAt @map("actualizado_en")
+
+  contactosTriaje       TriajeContacto[]
+  programaciones        ProgramacionSemanal[]
+
+  @@map("avisos")
+}
+
+// =====================================================================
+// 4. TRIAJE OPERATIVO Y CONTACTOS CON SOLICITANTE
+// =====================================================================
+model TriajeContacto {
+  id              String   @id @default(uuid())
+  avisoId         String   @map("aviso_id")
+  aviso           Aviso    @relation(fields: [avisoId], references: [id], onDelete: Cascade)
+  fecha           DateTime @default(now())
+  canal           String   // Correo, Llamada, Presencial, SAP
+  solicitante     String
+  resumen         String
+  acuerdosTomados String   @map("acuerdos_tomados")
+  registradoPor   String   @map("registrado_por")
+
+  @@map("triaje_contactos")
+}
+
+// =====================================================================
+// 5. DOTACIÓN, PERSONAL Y PROGRAMACIÓN SEMANAL DE HH
+// =====================================================================
+model Personal {
+  id             String             @id @default(uuid())
+  legajo         String             @unique
+  nombre         String
+  especialidad   String             // Civil, Soldador, Mecánico, Pintor, etc.
+  regimenHorario Int                @default(9) @map("regimen_horario") // 8 o 9 horas
+  activo         Boolean            @default(true)
+  creadoEn       DateTime           @default(now()) @map("creado_en")
+
+  ausencias      AusenciaPersonal[]
+  asignaciones   ProgramacionSemanal[]
+
+  @@map("personal")
+}
+
+model AusenciaPersonal {
+  id            String   @id @default(uuid())
+  personalId    String   @map("personal_id")
+  personal      Personal @relation(fields: [personalId], references: [id], onDelete: Cascade)
+  tipo          String   // Vacaciones, Licencia Médica, Curso, etc.
+  fechaInicio   DateTime @map("fecha_inicio")
+  fechaFin      DateTime @map("fecha_fin")
+  observaciones String?
+
+  @@map("ausencias_personal")
+}
+
+model ProgramacionSemanal {
+  id               String   @id @default(uuid())
+  semana           Int      // 1 a 52
+  anio             Int      // ej: 2026
+  personalId       String   @map("personal_id")
+  personal         Personal @relation(fields: [personalId], references: [id], onDelete: Cascade)
+  avisoId          String?  @map("aviso_id")
+  aviso            Aviso?   @relation(fields: [avisoId], references: [id], onDelete: SetNull)
+  diaSemana        String   @map("dia_semana") // Lunes, Martes, etc.
+  fecha            DateTime
+  horasAsignadas   Float    @map("horas_asignadas")
+  descripcionTarea String?  @map("descripcion_tarea")
+  cumplida         Boolean  @default(false)
+
+  @@map("programacion_semanal")
+}
+
+// =====================================================================
+// 6. OBRAS PLANIFICADAS Y LIBRO DIARIO DE OBRA
+// =====================================================================
+model Obra {
+  id                      String        @id @default(uuid())
+  codigo                  String        @unique // Ej: OBRA-2026-001
+  nombre                  String
+  ubicacion               String
+  fechaInicio             DateTime      @map("fecha_inicio")
+  fechaFin                DateTime      @map("fecha_fin")
+  avanceProgramado        Float         @default(0) @map("avance_programado")
+  avanceReal              Float         @default(0) @map("avance_real")
+  estado                  String        @default("Planificación") // Planificación, En Ejecución, Finalizada
+  supervisorResponsableId String?       @map("supervisor_responsable_id")
+
+  librosDiarios           LibroDiario[]
+
+  @@map("obras")
+}
+
+model LibroDiario {
+  id                     String         @id @default(uuid())
+  obraId                 String         @map("obra_id")
+  obra                   Obra           @relation(fields: [obraId], references: [id], onDelete: Cascade)
+  fecha                  DateTime
+  condicionClimatica     String         @map("condicion_climatica")
+  interferencias         String?        // Lista tipificada en formato JSON o string separado por comas
+  descripcionJornada     String         @map("descripcion_jornada")
+  observacionesSeguridad String         @map("observaciones_seguridad")
+  supervisorId           String         @map("supervisor_id")
+  supervisor             Usuario        @relation("SupervisorLibroDiario", fields: [supervisorId], references: [id])
+  firmaSupervisorUrl     String?        @map("firma_supervisor_url")
+  validadoCliente        Boolean        @default(false) @map("validado_cliente")
+  firmaClienteUrl        String?        @map("firma_cliente_url")
+  tokenValidacion        String?        @unique @map("token_validacion")
+  emailClienteNotificado String?        @map("email_cliente_notificado")
+  creadoEn               DateTime       @default(now()) @map("creado_en")
+
+  fotos                  FotoBitacora[]
+
+  @@map("libros_diarios")
+}
+
+model FotoBitacora {
+  id             String      @id @default(uuid())
+  libroDiarioId  String      @map("libro_diario_id")
+  libroDiario    LibroDiario @relation(fields: [libroDiarioId], references: [id], onDelete: Cascade)
+  etapa          String      // Antes, Durante, Después
+  url            String
+  diagnosticoPie String      @map("diagnostico_pie")
+  creadoEn       DateTime    @default(now()) @map("creado_en")
+
+  @@map("fotos_bitacora")
+}
+
+// =====================================================================
+// 7. INFORMES TÉCNICOS CRR (MODELO ARAUCO)
+// =====================================================================
+model InformeCRR {
+  id                       String            @id @default(uuid())
+  codigoInforme            String            @unique @map("codigo_informe") // Ej: CRR – 00124 – 2026
+  titulo                   String
+  empresaContratista       String            @default("CONTRATISTA INDUSTRIAL CRR") @map("empresa_contratista")
+  distribucion             String            @default("Inspección Técnica Arauco / Operaciones 340CRR")
+  responsableId            String            @map("responsable_id")
+  responsable              Usuario           @relation("ResponsableInforme", fields: [responsableId], references: [id])
+  avisoNumero              String?           @map("aviso_numero")
+  ordenNumero              String?           @map("orden_numero")
+  ubicacionTecnica         String?           @map("ubicacion_tecnica")
+  objetivo                 String
+  normativaArauco          String            @map("normativa_arauco")
+  
+  // Tareas Estandarizadas
+  computosMetricos         String            @map("computos_metricos")
+  montajeAndamios          String            @map("montaje_andamios")
+  preparacionSuperficie    String            @map("preparacion_superficie")
+  criterioReemplazoPerfiles String           @map("criterio_reemplazo_perfiles")
+  esquemaPintura           String            @map("esquema_pintura")
+  ordenAseoDossier         String            @map("orden_aseo_dossier")
+
+  firmaElaboroUrl          String?           @map("firma_elaboro_url")
+  firmaAproboUrl           String?           @map("firma_aprobo_url")
+  aprobadorNombre          String?           @default("Ing. Inspección Técnica Arauco") @map("aprobador_nombre")
+  fechaElaboracion         DateTime          @default(now()) @map("fecha_elaboracion")
+  estado                   String            @default("Borrador") // Borrador, Preliminar, Aprobado
+
+  fotos                    FotoInformeCRR[]
+
+  @@map("informes_crr")
+}
+
+model FotoInformeCRR {
+  id                 String     @id @default(uuid())
+  informeId          String     @map("informe_id")
+  informe            InformeCRR @relation(fields: [informeId], references: [id], onDelete: Cascade)
+  etapa              String     // Antes, Durante, Después
+  url                String
+  diagnosticoTecnico String     @map("diagnostico_tecnico")
+  pieDeFoto          String     @map("pie_de_foto")
+
+  @@map("fotos_informe_crr")
+}
