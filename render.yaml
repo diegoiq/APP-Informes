@@ -19,12 +19,10 @@ services:
     plan: free
     region: oregon
     branch: main
-    # Fase 1: Compilación de paquetes (npm workspaces)
+    # Fase de compilación del monorepo
     buildCommand: npm install && npm run build
-    # Fase 2: Pre-despliegue con acceso a la red privada de PostgreSQL
-    preDeployCommand: npx prisma db push --schema=server/prisma/schema.prisma && npx tsx server/src/database/seed.ts
-    # Fase 3: Arranque del servidor que sirve la API y la SPA
-    startCommand: node server/dist/index.js
+    # En capa gratuita (Free Tier): se ejecuta la sincronización de tablas y arranque en startCommand
+    startCommand: npx prisma db push --schema=server/prisma/schema.prisma && npx tsx server/src/database/seed.ts && node server/dist/index.js
     envVars:
       - key: NODE_ENV
         value: production
