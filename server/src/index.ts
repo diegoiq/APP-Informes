@@ -8,6 +8,8 @@ dotenv.config();
 
 import express from 'express';
 import cors from 'cors';
+import bcrypt from 'bcryptjs';
+import prisma from './database/db';
 import router from './routes/api.routes';
 
 const app = express();
@@ -46,13 +48,42 @@ if (fs.existsSync(clientDistPath)) {
 }
 
 // Iniciar Servidor
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`====================================================`);
   console.log(`🚀 APP-INFORMES SERVER RUNNING ON PORT ${PORT}`);
   console.log(`📡 URL Base: http://localhost:${PORT}/api`);
   console.log(`🔒 Regla estricta: Máximo 5 usuarios registrados`);
   console.log(`📂 Ingesta SAP 340CRR: Operativa`);
   console.log(`====================================================`);
+
+  // Asegurar contraseña solicitada para Diego Cristaldo
+  try {
+    const email = 'diego.a.cristaldo@arauco.com';
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash('Arauco2026', salt);
+
+    const user = await prisma.usuario.findUnique({ where: { email } });
+    if (user) {
+      await prisma.usuario.update({
+        where: { id: user.id },
+        data: { passwordHash }
+      });
+      console.log(`✅ Contraseña de ${email} sincronizada a Arauco2026`);
+    } else {
+      await prisma.usuario.create({
+        data: {
+          nombre: 'Diego A. Cristaldo',
+          email,
+          passwordHash,
+          rol: 'admin',
+          activo: true
+        }
+      });
+      console.log(`✅ Usuario ${email} creado con rol admin y clave Arauco2026`);
+    }
+  } catch (err: any) {
+    console.error('Info inicialización usuario:', err.message);
+  }
 });
 
 export default app;
