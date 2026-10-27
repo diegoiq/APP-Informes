@@ -336,7 +336,8 @@ export class SapParserService {
               tipoRiesgo: item.tipoRiesgo ?? existing.tipoRiesgo,
               tipoCondicionFinal: item.tipoCondicionFinal ?? existing.tipoCondicionFinal,
               efectoAnalisis: item.efectoAnalisis ?? existing.efectoAnalisis,
-              faseAvance: item.faseAvance ?? existing.faseAvance
+              faseAvance: item.faseAvance ?? existing.faseAvance,
+              activo: true
             }
           });
           summary.actualizados++;

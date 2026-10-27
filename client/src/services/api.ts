@@ -75,6 +75,12 @@ class ApiService {
     });
   }
 
+  public clearSapData() {
+    return this.request('/sap/clear', {
+      method: 'POST'
+    });
+  }
+
   public getAvisosStats() {
     return this.request('/avisos/stats');
   }

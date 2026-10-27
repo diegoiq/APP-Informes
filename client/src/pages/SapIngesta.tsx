@@ -15,7 +15,8 @@ import {
   Clock,
   Sparkles,
   Download,
-  HardHat
+  HardHat,
+  Trash2
 } from 'lucide-react';
 import { RUBROS } from '@app-informes/shared';
 import ModalRelevamientoPS from '../components/ModalRelevamientoPS';
@@ -30,6 +31,11 @@ export const SapIngesta: React.FC = () => {
   // Modal Relevamiento & Movilización a PS
   const [selectedAvisoRelevamiento, setSelectedAvisoRelevamiento] = useState<any | null>(null);
   const [showRelevamientoModal, setShowRelevamientoModal] = useState(false);
+
+  // Modal Advertencia y Borrado de Datos Excel
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [clearSuccess, setClearSuccess] = useState<string | null>(null);
 
   // Filtros
   const [search, setSearch] = useState('');
@@ -105,6 +111,23 @@ export const SapIngesta: React.FC = () => {
     }
   };
 
+  const handleClearExcelData = async () => {
+    setClearing(true);
+    setError(null);
+    try {
+      const res = await api.clearSapData();
+      setClearSuccess(res.message || 'Datos cargados desde Excel eliminados exitosamente.');
+      setShowClearModal(false);
+      await fetchAvisos();
+      await loadRevisiones();
+      setTimeout(() => setClearSuccess(null), 6000);
+    } catch (err: any) {
+      alert(err.message || 'Error al eliminar los datos cargados desde Excel.');
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
@@ -134,13 +157,31 @@ export const SapIngesta: React.FC = () => {
           </a>
           <button
             onClick={fetchAvisos}
-            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition"
+            className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white rounded-lg text-xs font-semibold hover:bg-slate-800 transition cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>Actualizar</span>
           </button>
+          <button
+            type="button"
+            onClick={() => setShowClearModal(true)}
+            disabled={avisos.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+            title="Borrar todos los avisos y operaciones cargadas desde el archivo Excel"
+          >
+            <Trash2 className="w-4 h-4 text-red-600" />
+            <span>Borrar Datos de Excel</span>
+          </button>
         </div>
       </div>
+
+      {/* Notificación de Limpieza Exitosa */}
+      {clearSuccess && (
+        <div className="p-3.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs text-emerald-800 flex items-center gap-2.5 shadow-sm animate-in fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span className="font-medium">{clearSuccess}</span>
+        </div>
+      )}
 
       {/* Zona Drag & Drop para Ingesta Excel */}
       <div
@@ -509,6 +550,85 @@ export const SapIngesta: React.FC = () => {
             fetchAvisos();
           }}
         />
+      )}
+
+      {/* Modal de Advertencia y Confirmación antes de Borrar Datos de Excel */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div
+            className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera con advertencia */}
+            <div className="bg-red-50 border-b border-red-100 p-5 flex items-start gap-3.5">
+              <div className="p-2.5 bg-red-600 text-white rounded-xl shadow-md shrink-0">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                  ¿Deseas borrar todo lo cargado desde el Excel?
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  Esta acción eliminará de la vista activa todos los requerimientos y órdenes provenientes de la ingesta de SAP.
+                </p>
+              </div>
+            </div>
+
+            {/* Contenido con detalles y advertencias */}
+            <div className="p-5 space-y-4 text-xs text-slate-700">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
+                  Resumen de elementos a archivar (Soft-Delete):
+                </div>
+                <ul className="space-y-1.5 text-slate-600 list-disc list-inside">
+                  <li>
+                    <strong>{avisos.length} avisos SAP</strong> en la cartera de trabajo.
+                  </li>
+                  <li>
+                    Operaciones y horas de órdenes vinculadas (hoja <strong>IW37N / OM-HH</strong>).
+                  </li>
+                  <li>
+                    Registros de contactos de triaje asociados a estos avisos.
+                  </li>
+                </ul>
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] leading-relaxed">
+                ⚠️ <strong>Nota de Seguridad:</strong> Se aplica <em>soft-delete</em> estricto (no se realiza borrado físico destructivo en la BD). La tabla quedará limpia para que puedas cargar una nueva versión de la planilla Excel sin duplicados ni interferencias.
+              </div>
+            </div>
+
+            {/* Botones de acción */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowClearModal(false)}
+                disabled={clearing}
+                className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleClearExcelData}
+                disabled={clearing}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {clearing ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Borrando datos...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Sí, borrar datos de Excel</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
     </div>

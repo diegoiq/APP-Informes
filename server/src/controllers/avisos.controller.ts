@@ -480,6 +480,37 @@ export class AvisosController {
   }
 
   /**
+   * Elimina/archiva todos los datos cargados desde Excel (Avisos, Operaciones OM y Contactos de Triaje)
+   */
+  public static async clearExcelData(req: Request, res: Response) {
+    try {
+      // 1. Soft-delete de operaciones OM vinculadas a avisos
+      const opsResult = await prisma.operacionOM.deleteMany({});
+      
+      // 2. Soft-delete de contactos de triaje
+      const triajeResult = await prisma.triajeContacto.deleteMany({});
+
+      // 3. Soft-delete de todos los avisos
+      const avisosResult = await prisma.aviso.deleteMany({});
+
+      return res.json({
+        message: 'Todos los datos cargados desde Excel han sido eliminados correctamente.',
+        detalles: {
+          avisosBorrados: avisosResult.count,
+          operacionesBorradas: opsResult.count,
+          contactosBorrados: triajeResult.count
+        }
+      });
+    } catch (error: any) {
+      console.error('Error al borrar datos cargados desde Excel:', error);
+      return res.status(500).json({
+        message: 'Error al eliminar datos de Excel',
+        error: error.message || String(error)
+      });
+    }
+  }
+
+  /**
    * Soft-delete de aviso
    */
   public static async deleteAviso(req: Request, res: Response) {

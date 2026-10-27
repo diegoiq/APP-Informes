@@ -23,6 +23,7 @@ router.get('/auth/users', authMiddleware as any, AuthController.listUsers as any
 // 2. INGESTA INTELIGENTE SAP
 router.post('/sap/upload', upload.single('file'), AvisosController.uploadExcel);
 router.get('/sap/sample-file', AvisosController.downloadSample);
+router.post('/sap/clear', authMiddleware as any, AvisosController.clearExcelData as any);
 
 // 3. AVISOS Y GESTIÓN DE CAMPO
 router.get('/avisos/stats', AvisosController.getStats);

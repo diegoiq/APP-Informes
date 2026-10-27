@@ -37,18 +37,18 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center justify-between h-16">
           
           {/* Logo y Marca */}
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 py-1">
             <div className="bg-gradient-to-br from-emerald-500 to-sky-600 p-2 rounded-lg shadow-md flex items-center justify-center shrink-0">
               <HardHat className="w-5 h-5 text-white" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="font-extrabold tracking-tight text-base sm:text-lg text-white truncate">APP-Informes</span>
-                <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-bold bg-sky-950 text-sky-400 border border-sky-800 rounded shrink-0">
+            <div className="min-w-0 flex flex-col justify-center">
+              <div className="flex items-center gap-1.5 sm:gap-2 leading-none">
+                <span className="font-extrabold tracking-tight text-base sm:text-lg text-white leading-tight">APP-Informes</span>
+                <span className="px-1.5 py-0.5 text-[10px] sm:text-xs font-bold bg-sky-950 text-sky-400 border border-sky-800 rounded shrink-0 leading-none">
                   340CRR
                 </span>
               </div>
-              <span className="text-[11px] sm:text-xs text-slate-400 font-medium hidden sm:block truncate">
+              <span className="text-[11px] sm:text-xs text-slate-400 font-medium hidden sm:block truncate leading-tight mt-0.5">
                 Arauco Mantenimiento & Estructuras
               </span>
             </div>
