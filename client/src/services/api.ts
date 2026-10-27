@@ -57,6 +57,13 @@ class ApiService {
     });
   }
 
+  public resetPassword(payload: { email: string; newPassword: string }) {
+    return this.request('/auth/reset-password', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  }
+
   public getMe() {
     return this.request('/auth/me');
   }

@@ -209,4 +209,32 @@ export class AuthController {
       return res.status(500).json({ message: 'Error al listar usuarios', error: error.message });
     }
   }
+
+  /**
+   * Restablecer contraseña de un usuario
+   */
+  public static async resetPassword(req: Request, res: Response) {
+    try {
+      const { email, newPassword } = req.body;
+      if (!email || !newPassword) {
+        return res.status(400).json({ message: 'Email y nueva contraseña son obligatorios.' });
+      }
+      const emailNormalized = String(email).trim().toLowerCase();
+      const user = await prisma.usuario.findUnique({
+        where: { email: emailNormalized }
+      });
+      if (!user) {
+        return res.status(404).json({ message: `No se encontró ningún usuario con el correo ${emailNormalized}` });
+      }
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(String(newPassword), salt);
+      await prisma.usuario.update({
+        where: { id: user.id },
+        data: { passwordHash }
+      });
+      return res.json({ message: `Contraseña restablecida exitosamente para ${emailNormalized}. Ya puedes iniciar sesión con tu nueva clave.` });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Error al restablecer contraseña', error: error.message });
+    }
+  }
 }
