@@ -54,7 +54,8 @@ export const ProgramacionSemanal: React.FC = () => {
     opSabado: 0,
     opDomingo: 0,
     opLunes: 7,
-    opMartes: 8
+    opMartes: 8,
+    horasJornada: 7
   });
 
   const loadProgramacion = async () => {
@@ -70,7 +71,8 @@ export const ProgramacionSemanal: React.FC = () => {
           opSabado: res.dotacion.opSabado,
           opDomingo: res.dotacion.opDomingo,
           opLunes: res.dotacion.opLunes,
-          opMartes: res.dotacion.opMartes
+          opMartes: res.dotacion.opMartes,
+          horasJornada: res.dotacion.horasJornada || 7
         });
       }
     } catch (err: any) {
@@ -334,19 +336,28 @@ export const ProgramacionSemanal: React.FC = () => {
 
       {/* Panel de Control de Dotación y Capacidad Neta Semanal */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <CalendarDays className="w-4 h-4 text-sky-600" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <CalendarDays className="w-4 h-4 text-sky-600 shrink-0" />
             <h3 className="font-extrabold text-sm text-slate-900">
               Dotación Diaria & Capacidad Neta de Horas Hombre ({getPeriodoFechas()})
             </h3>
+            <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+              (data?.dotacion?.horasJornada || dotacionForm.horasJornada || 7) === 10
+                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                : 'bg-sky-100 text-sky-800 border border-sky-200'
+            }`}>
+              {(data?.dotacion?.horasJornada || dotacionForm.horasJornada || 7) === 10
+                ? 'Turno 12h: 10 hs efectivas'
+                : 'Turno 9h: 7 hs corridas normales'}
+            </span>
           </div>
           <button
             onClick={() => {
               if (editDotacion) handleSaveDotacion();
               else setEditDotacion(true);
             }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm cursor-pointer self-start sm:self-auto ${
               editDotacion
                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
@@ -356,6 +367,42 @@ export const ProgramacionSemanal: React.FC = () => {
             <span>{editDotacion ? 'Guardar Dotación' : 'Modificar Dotación'}</span>
           </button>
         </div>
+
+        {/* Selector de Régimen de Jornada al Modificar Dotación */}
+        {editDotacion && (
+          <div className="bg-sky-50/80 border border-sky-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-150">
+            <div>
+              <span className="font-extrabold text-sky-950 block">Régimen Horario de la Dotación:</span>
+              <span className="text-[11px] text-sky-800">
+                Arauco 340CRR: Turno normal de 9h computa 7h corridas normales. Turno de 12h computa 10h efectivas.
+              </span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setDotacionForm({ ...dotacionForm, horasJornada: 7 })}
+                className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                  (dotacionForm.horasJornada || 7) === 7
+                    ? 'bg-sky-700 text-white shadow'
+                    : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                7 hs corridas (Turno 9h normal)
+              </button>
+              <button
+                type="button"
+                onClick={() => setDotacionForm({ ...dotacionForm, horasJornada: 10 })}
+                className={`px-3 py-1.5 rounded-lg font-bold text-xs transition cursor-pointer ${
+                  (dotacionForm.horasJornada || 7) === 10
+                    ? 'bg-purple-700 text-white shadow'
+                    : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                10 hs efectivas (Turno 12h extendido)
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Cajas Diarias de Dotación (Ciclo Miércoles a Martes) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -368,7 +415,8 @@ export const ProgramacionSemanal: React.FC = () => {
                             d.key === 'lu' ? 'opLunes' : 'opMartes';
 
             const numOperarios = (dotacionForm as any)[formKey] ?? 0;
-            const hhDisp = data?.horasDisponibles?.[d.key] ?? (numOperarios * 7);
+            const jornadaActiva = editDotacion ? (dotacionForm.horasJornada || 7) : (data?.dotacion?.horasJornada || dotacionForm.horasJornada || 7);
+            const hhDisp = data?.horasDisponibles?.[d.key] ?? (numOperarios * jornadaActiva);
             const hhProg = data?.horasProgramadas?.[d.key] ?? 0;
             const isFinDeSemana = d.key === 'sa' || d.key === 'dom';
 

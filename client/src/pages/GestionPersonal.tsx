@@ -255,12 +255,15 @@ export const GestionPersonal: React.FC = () => {
     }
   };
 
-  // Métricas
+  // Métricas de Dotación según Criterio Arauco (9h = 7h corridas normales, 12h = 10h efectivas)
   const totalOperarios = personalList.length;
   const activos = personalList.filter((p) => p.activo).length;
   const totalHH = personalList
     .filter((p) => p.activo)
-    .reduce((acc, p) => acc + (p.regimenHorario || 9) * 5, 0);
+    .reduce((acc, p) => {
+      const ef = p.horasEfectivasDiarias || (p.regimenHorario === 12 ? 10 : 7);
+      return acc + ef * 5;
+    }, 0);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -313,6 +316,19 @@ export const GestionPersonal: React.FC = () => {
         </div>
       </div>
 
+      {/* Banner de Criterio de Jornadas Arauco */}
+      <div className="bg-sky-50/80 border border-sky-200 rounded-xl p-3.5 flex items-center gap-3 text-xs text-sky-900 shadow-sm">
+        <Clock className="w-5 h-5 text-sky-600 shrink-0" />
+        <div className="min-w-0">
+          <strong className="font-extrabold text-sky-950 block">
+            Criterio de Cómputo de Horas Arauco 340CRR:
+          </strong>
+          <span>
+            Los operarios trabajan normalmente <strong>9 horas</strong> (se consideran <strong>7 horas corridas diarias normales</strong> de labor directa). En turnos de <strong>12 horas</strong> se computan <strong>10 horas efectivas</strong> diarias.
+          </span>
+        </div>
+      </div>
+
       {/* Tarjetas de Métricas de Dotación */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -336,10 +352,10 @@ export const GestionPersonal: React.FC = () => {
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
           <div className="text-xs text-slate-500 font-semibold flex items-center gap-1.5">
             <Clock className="w-4 h-4 text-amber-600" />
-            <span>Capacidad Semanal</span>
+            <span>Capacidad Semanal Neta</span>
           </div>
-          <div className="text-2xl font-extrabold text-slate-900 mt-1">{totalHH} h</div>
-          <span className="text-[10px] text-slate-400">HH brutas disponibles</span>
+          <div className="text-2xl font-extrabold text-slate-900 mt-1">{totalHH} HH</div>
+          <span className="text-[10px] text-slate-400">7h u 10h efectivas × 5 días</span>
         </div>
 
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
@@ -408,7 +424,8 @@ export const GestionPersonal: React.FC = () => {
               ) : (
                 personalList.map((p) => {
                   const tieneAusenciaActiva = p.ausencias && p.ausencias.length > 0;
-                  const horasSemana = (p.regimenHorario || 9) * 5;
+                  const horasEfectivas = p.horasEfectivasDiarias || (p.regimenHorario === 12 ? 10 : 7);
+                  const horasSemanaEfectivas = horasEfectivas * 5;
 
                   return (
                     <tr key={p.id} className="hover:bg-slate-50/80 transition">
@@ -423,11 +440,21 @@ export const GestionPersonal: React.FC = () => {
                           {p.especialidad}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-semibold text-slate-700">
-                        {p.regimenHorario || 9}h / día
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-slate-800">
+                          {p.regimenHorario === 12 ? 'Turno 12h' : 'Turno 9h'}
+                        </div>
+                        <div className="text-[11px] font-bold text-sky-700">
+                          {horasEfectivas}h corridas/día
+                        </div>
                       </td>
-                      <td className="py-3 px-4 font-bold text-slate-900">
-                        {horasSemana}h / sem
+                      <td className="py-3 px-4">
+                        <div className="font-extrabold text-slate-900">
+                          {horasSemanaEfectivas} HH / sem
+                        </div>
+                        <div className="text-[10px] text-slate-400">
+                          {horasEfectivas}h × 5 días
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         {tieneAusenciaActiva ? (
@@ -538,15 +565,21 @@ export const GestionPersonal: React.FC = () => {
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Régimen Horario Diario</label>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Régimen Horario & Horas Efectivas Diarias
+                </label>
                 <select
                   value={regimenHorario}
                   onChange={(e) => setRegimenHorario(Number(e.target.value))}
-                  className="w-full p-2.5 border border-slate-300 rounded-lg font-semibold bg-white"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg font-semibold bg-white text-xs"
                 >
-                  <option value={9}>9 Horas / día (45 horas semanales)</option>
-                  <option value={8}>8 Horas / día (40 horas semanales)</option>
+                  <option value={9}>Turno Normal 9 hs (7 horas corridas normales - 35 HH sem)</option>
+                  <option value={12}>Turno Extendido 12 hs (10 horas efectivas - 50 HH sem)</option>
+                  <option value={8}>Turno 8 hs (7 horas corridas normales - 35 HH sem)</option>
                 </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  * Criterio Arauco 340CRR: Turno normal de 9h computa 7h corridas; turno extendido de 12h computa 10h efectivas.
+                </p>
               </div>
 
               {isEditing && (
@@ -599,7 +632,7 @@ export const GestionPersonal: React.FC = () => {
               </div>
               <button
                 onClick={() => {
-                  setBulkText(`LEG-201\tJuan Pérez Miranda\tCivil\t9\nLEG-202\tRodrigo Valdés\tPintura/Aislación\t9\nLEG-203\tMarcos Soto\tSoldador\t9\nLEG-204\tEsteban Silva\tCañerías/Mecánica\t8`);
+                  setBulkText(`LEG-201\tJuan Pérez Miranda\tCivil\t9\nLEG-202\tRodrigo Valdés\tPintura/Aislación\t9\nLEG-203\tMarcos Soto\tSoldador\t12\nLEG-204\tEsteban Silva\tCañerías/Mecánica\t9`);
                 }}
                 className="text-xs text-sky-600 hover:text-sky-700 font-bold underline"
               >
@@ -611,7 +644,10 @@ export const GestionPersonal: React.FC = () => {
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-slate-600 text-[11px]">
                 <strong>Formato de columnas (por línea):</strong>
                 <div className="font-mono mt-1 text-slate-800">
-                  Legajo [tab/coma] Nombre Completo [tab/coma] Especialidad [tab/coma] Horas
+                  Legajo [tab/coma] Nombre Completo [tab/coma] Especialidad [tab/coma] Turno_Horas (9 o 12)
+                </div>
+                <div className="text-[10px] text-sky-700 mt-1">
+                  * 9 hs = 7 hs corridas normales / 12 hs = 10 hs efectivas diarias de trabajo en planta.
                 </div>
               </div>
 

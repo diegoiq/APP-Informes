@@ -204,7 +204,8 @@ export interface Personal {
   legajo: string;
   nombre: string;
   especialidad: RubroType;
-  regimenHorario: number; // 8 o 9 horas
+  regimenHorario: number; // 9 (7 horas corridas normales) o 12 (10 horas efectivas)
+  horasEfectivasDiarias?: number; // 7 u 10
   activo: boolean;
   creadoEn: string;
 }
@@ -232,6 +233,8 @@ export interface AsignacionDia {
 
 export interface BalanceCapacidadOperario {
   personal: Personal;
+  horasEfectivasDiarias?: number; // 7 u 10
+  horasBaseSemanales?: number; // 35h o 50h
   capacidadDisponibleHoras: number;
   horasAsignadasTotales: number;
   porcentajeOcupacion: number;

@@ -1,6 +1,17 @@
 import { Request, Response } from 'express';
 import prisma from '../database/db';
 
+/**
+ * Regla de cálculo de horas de operarios Arauco:
+ * - Turno habitual de 9 horas -> 7 horas corridas diarias normales (35 horas semanales = 5 días * 7h)
+ * - Turno extendido de 12 horas -> 10 horas efectivas diarias (50 horas semanales = 5 días * 10h)
+ */
+export function getHorasEfectivasDiarias(regimen: number): number {
+  const reg = Number(regimen) || 9;
+  if (reg === 12 || reg === 10) return 10;
+  return 7; // Por defecto: turno habitual de 9h computa 7h corridas normales
+}
+
 export class PersonalController {
   /**
    * Listar personal con cálculo de disponibilidad, ausencias y filtros
@@ -39,7 +50,13 @@ export class PersonalController {
         },
         orderBy: { nombre: 'asc' }
       });
-      return res.json(personal);
+
+      const personalConHoras = personal.map((p) => ({
+        ...p,
+        horasEfectivasDiarias: getHorasEfectivasDiarias(p.regimenHorario)
+      }));
+
+      return res.json(personalConHoras);
     } catch (error: any) {
       return res.status(500).json({ message: 'Error al listar personal', error: error.message });
     }
@@ -65,16 +82,23 @@ export class PersonalController {
         return res.status(400).json({ message: `El legajo ${legajoClean} ya se encuentra registrado.` });
       }
 
+      let regimen = Number(regimenHorario) || 9;
+      if (regimen === 7) regimen = 9;
+      if (regimen === 10) regimen = 12;
+
       const nuevo = await prisma.personal.create({
         data: {
           legajo: legajoClean,
           nombre: String(nombre).trim(),
           especialidad: String(especialidad),
-          regimenHorario: Number(regimenHorario) || 9,
+          regimenHorario: regimen,
           activo: true
         }
       });
-      return res.status(201).json(nuevo);
+      return res.status(201).json({
+        ...nuevo,
+        horasEfectivasDiarias: getHorasEfectivasDiarias(nuevo.regimenHorario)
+      });
     } catch (error: any) {
       return res.status(500).json({ message: 'Error al crear personal', error: error.message });
     }
@@ -98,7 +122,9 @@ export class PersonalController {
         const legajo = String(item.legajo || '').trim().toUpperCase();
         const nombre = String(item.nombre || '').trim();
         const especialidad = String(item.especialidad || 'Mantenimiento General').trim();
-        const regimenHorario = Number(item.regimenHorario) || 9;
+        let regimenHorario = Number(item.regimenHorario) || 9;
+        if (regimenHorario === 7) regimenHorario = 9;
+        if (regimenHorario === 10) regimenHorario = 12;
 
         if (!legajo || !nombre) {
           errores.push(`Fila omitida por falta de legajo o nombre: ${JSON.stringify(item)}`);
@@ -144,17 +170,24 @@ export class PersonalController {
       const { id } = req.params;
       const { legajo, nombre, especialidad, regimenHorario, activo } = req.body;
 
+      let regimen = regimenHorario !== undefined ? Number(regimenHorario) : undefined;
+      if (regimen === 7) regimen = 9;
+      if (regimen === 10) regimen = 12;
+
       const updated = await prisma.personal.update({
         where: { id },
         data: {
           ...(legajo && { legajo: String(legajo).trim().toUpperCase() }),
           ...(nombre && { nombre: String(nombre).trim() }),
           ...(especialidad && { especialidad: String(especialidad) }),
-          ...(regimenHorario !== undefined && { regimenHorario: Number(regimenHorario) }),
+          ...(regimen !== undefined && { regimenHorario: regimen }),
           ...(activo !== undefined && { activo: Boolean(activo) })
         }
       });
-      return res.json(updated);
+      return res.json({
+        ...updated,
+        horasEfectivasDiarias: getHorasEfectivasDiarias(updated.regimenHorario)
+      });
     } catch (error: any) {
       return res.status(500).json({ message: 'Error al actualizar personal', error: error.message });
     }
@@ -234,10 +267,12 @@ export class PersonalController {
         }
       });
 
-      // Cálculo de balance de capacidad
+      // Cálculo de balance de capacidad según regla Arauco:
+      // - Turno normal de 9 horas -> 7 horas corridas normales diarias (35 horas semanales = 5 días * 7h)
+      // - Turno extendido de 12 horas -> 10 horas efectivas diarias (50 horas semanales = 5 días * 10h)
       const tablero = personalList.map((p: any) => {
-        // Horas base semanales (régimen 8 o 9 horas * 5 días laborales = 40 o 45h)
-        const horasBaseSemanales = (p.regimenHorario || 9) * 5;
+        const horasEfectivasDiarias = getHorasEfectivasDiarias(p.regimenHorario);
+        const horasBaseSemanales = horasEfectivasDiarias * 5;
 
         // Sumar horas asignadas en la semana
         const horasAsignadasTotales = p.asignaciones.reduce(
@@ -260,7 +295,12 @@ export class PersonalController {
         }
 
         return {
-          personal: p,
+          personal: {
+            ...p,
+            horasEfectivasDiarias
+          },
+          horasEfectivasDiarias,
+          horasBaseSemanales,
           capacidadDisponibleHoras: Math.max(0, horasBaseSemanales - horasAsignadasTotales),
           horasAsignadasTotales,
           porcentajeOcupacion,
