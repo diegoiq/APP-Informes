@@ -12,7 +12,8 @@ import {
   Camera,
   PenTool,
   Clock,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -240,218 +241,240 @@ export const InformesCRR: React.FC = () => {
 
       {/* Modal Nuevo Informe CRR */}
       {showModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 my-8">
-            <div className="border-b pb-3 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200">
+          <div
+            className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera Fija */}
+            <div className="bg-slate-900 text-white p-4 sm:p-5 flex items-start justify-between gap-3 shrink-0">
               <div>
-                <h3 className="font-extrabold text-lg text-slate-900">
+                <div className="flex items-center gap-2 text-xs text-sky-400 font-bold uppercase tracking-wider mb-1">
+                  <FileText className="w-4 h-4 shrink-0" />
+                  <span>Generador de Informes Técnicos</span>
+                  <span className="font-mono px-2 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800 text-[10px]">
+                    CRR – 00XXX – 2026
+                  </span>
+                </div>
+                <h3 className="font-extrabold text-base sm:text-lg text-white">
                   Generar Informe Técnico Modelo CRR
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Estructura formal según Especificación Técnica Arauco
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Estructura formal según Especificación Técnica Arauco (Sa 2½, 40% reemplazo, 3 capas pintura)
                 </p>
               </div>
-              <span className="text-xs font-mono font-extrabold text-sky-700 bg-sky-50 px-2.5 py-1 rounded border border-sky-200">
-                CRR – 00XXX – 2026
-              </span>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition shrink-0 cursor-pointer"
+                title="Cerrar ventana"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <form onSubmit={handleCrearInforme} className="space-y-4 text-xs">
-              
-              {/* Selección de Aviso SAP */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Vincular con Aviso SAP</label>
-                  <select
-                    value={avisoSeleccionado?.id || ''}
-                    onChange={(e) => handleAvisoChange(e.target.value)}
-                    className="w-full p-2 border border-slate-300 rounded-lg font-medium"
-                  >
-                    {avisos.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        Aviso #{a.numeroAviso} {a.numeroOrden ? `[OT: ${a.numeroOrden}]` : ''} - {a.descripcion.substring(0, 35)}...
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Título del Informe</label>
-                  <input
-                    type="text"
-                    required
-                    value={titulo}
-                    onChange={(e) => setTitulo(e.target.value)}
-                    placeholder="Informe Técnico de Condición Subestándar"
-                    className="w-full p-2 border border-slate-300 rounded-lg font-bold"
-                  />
-                </div>
-              </div>
-
-              {/* Tareas a Realizar Estandarizadas Arauco */}
-              <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wider block">
-                  Alcance Operativo Estandarizado (Sección 2 Arauco)
-                </span>
-
+            {/* Formulario con Scroll Interno */}
+            <form onSubmit={handleCrearInforme} className="flex flex-col flex-1 overflow-hidden">
+              <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                
+                {/* Selección de Aviso SAP */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-0.5">2.1 Cómputos métricos</label>
-                    <input
-                      type="text"
-                      value={computos}
-                      onChange={(e) => setComputos(e.target.value)}
-                      className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-0.5">2.2 Montaje de andamios</label>
-                    <input
-                      type="text"
-                      value={andamios}
-                      onChange={(e) => setAndamios(e.target.value)}
-                      className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-0.5">2.3 Preparación Sa 2 / Sa 2½</label>
-                    <input
-                      type="text"
-                      value={preparacion}
-                      onChange={(e) => setPreparacion(e.target.value)}
-                      className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-0.5">2.4 Criterio reemplazo (≥ 40%)</label>
-                    <input
-                      type="text"
-                      value={reemplazo}
-                      onChange={(e) => setReemplazo(e.target.value)}
-                      className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-0.5">2.5 Esquema de pintura (Epoxi + Poliuretano)</label>
-                  <input
-                    type="text"
-                    value={esquemaPintura}
-                    onChange={(e) => setEsquemaPintura(e.target.value)}
-                    className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
-                  />
-                </div>
-              </div>
-
-              {/* Registro Fotográfico a 2 Columnas con Diagnósticos */}
-              <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wider block">
-                  Registro Fotográfico (Grilla a 2 Columnas)
-                </span>
-
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
-                  <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Etapa</label>
+                    <label className="block font-bold text-slate-700 mb-1">Vincular con Aviso SAP</label>
                     <select
-                      value={tempEtapa}
-                      onChange={(e: any) => setTempEtapa(e.target.value)}
-                      className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
+                      value={avisoSeleccionado?.id || ''}
+                      onChange={(e) => handleAvisoChange(e.target.value)}
+                      className="w-full p-2 border border-slate-300 rounded-lg font-medium bg-white"
                     >
-                      <option value="Antes">Antes</option>
-                      <option value="Durante">Durante</option>
-                      <option value="Después">Después</option>
+                      {avisos.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          Aviso #{a.numeroAviso} {a.numeroOrden ? `[OT: ${a.numeroOrden}]` : ''} - {a.descripcion.substring(0, 35)}...
+                        </option>
+                      ))}
                     </select>
                   </div>
 
-                  <div className="sm:col-span-2">
-                    <label className="block font-semibold text-slate-700 mb-1">Diagnóstico / Observación</label>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Título del Informe</label>
                     <input
                       type="text"
-                      value={tempDiagnostico}
-                      onChange={(e) => setTempDiagnostico(e.target.value)}
-                      placeholder="Corrosión en viga de soporte..."
-                      className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
+                      required
+                      value={titulo}
+                      onChange={(e) => setTitulo(e.target.value)}
+                      placeholder="Informe Técnico de Condición Subestándar"
+                      className="w-full p-2 border border-slate-300 rounded-lg font-bold focus:ring-2 focus:ring-sky-500"
                     />
+                  </div>
+                </div>
+
+                {/* Tareas a Realizar Estandarizadas Arauco */}
+                <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wider block">
+                    Alcance Operativo Estandarizado (Sección 2 Arauco)
+                  </span>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5">2.1 Cómputos métricos</label>
+                      <input
+                        type="text"
+                        value={computos}
+                        onChange={(e) => setComputos(e.target.value)}
+                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5">2.2 Montaje de andamios</label>
+                      <input
+                        type="text"
+                        value={andamios}
+                        onChange={(e) => setAndamios(e.target.value)}
+                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5">2.3 Preparación Sa 2 / Sa 2½</label>
+                      <input
+                        type="text"
+                        value={preparacion}
+                        onChange={(e) => setPreparacion(e.target.value)}
+                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-0.5">2.4 Criterio reemplazo (≥ 40%)</label>
+                      <input
+                        type="text"
+                        value={reemplazo}
+                        onChange={(e) => setReemplazo(e.target.value)}
+                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
+                      />
+                    </div>
                   </div>
 
                   <div>
-                    <label className="block font-semibold text-slate-700 mb-1">Cargar Imagen</label>
+                    <label className="block font-semibold text-slate-700 mb-0.5">2.5 Esquema de pintura (Epoxi + Poliuretano)</label>
                     <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhotoUpload}
-                      className="w-full text-[10px]"
+                      type="text"
+                      value={esquemaPintura}
+                      onChange={(e) => setEsquemaPintura(e.target.value)}
+                      className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={handleAddFoto}
-                    className="px-3 py-1 bg-sky-600 text-white rounded font-bold hover:bg-sky-500"
-                  >
-                    + Agregar Foto a la Grilla
-                  </button>
-                </div>
+                {/* Registro Fotográfico a 2 Columnas con Diagnósticos */}
+                <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wider block">
+                    Registro Fotográfico (Grilla a 2 Columnas)
+                  </span>
 
-                {/* Previsualización de Fotos en Grilla */}
-                {fotosList.length > 0 && (
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    {fotosList.map((f, i) => (
-                      <div key={i} className="flex gap-2 p-2 bg-white rounded-lg border border-slate-200">
-                        <img src={f.url} alt="Evidencia" className="w-16 h-16 object-cover rounded" />
-                        <div className="text-[11px] overflow-hidden">
-                          <span className="font-bold text-sky-800">{f.etapa}</span>
-                          <p className="font-semibold text-slate-800 truncate">{f.diagnosticoTecnico}</p>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Etapa</label>
+                      <select
+                        value={tempEtapa}
+                        onChange={(e: any) => setTempEtapa(e.target.value)}
+                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
+                      >
+                        <option value="Antes">Antes</option>
+                        <option value="Durante">Durante</option>
+                        <option value="Después">Después</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                      <label className="block font-semibold text-slate-700 mb-1">Diagnóstico / Observación</label>
+                      <input
+                        type="text"
+                        value={tempDiagnostico}
+                        onChange={(e) => setTempDiagnostico(e.target.value)}
+                        placeholder="Corrosión en viga de soporte..."
+                        className="w-full p-1.5 bg-white border border-slate-300 rounded-md"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Cargar Imagen</label>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handlePhotoUpload}
+                        className="w-full text-[10px]"
+                      />
+                    </div>
                   </div>
-                )}
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={handleAddFoto}
+                      className="px-3 py-1 bg-sky-600 text-white rounded font-bold hover:bg-sky-500 cursor-pointer"
+                    >
+                      + Agregar Foto a la Grilla
+                    </button>
+                  </div>
+
+                  {/* Previsualización de Fotos en Grilla */}
+                  {fotosList.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3 pt-2">
+                      {fotosList.map((f, i) => (
+                        <div key={i} className="flex gap-2 p-2 bg-white rounded-lg border border-slate-200">
+                          <img src={f.url} alt="Evidencia" className="w-16 h-16 object-cover rounded" />
+                          <div className="text-[11px] overflow-hidden">
+                            <span className="font-bold text-sky-800">{f.etapa}</span>
+                            <p className="font-semibold text-slate-800 truncate">{f.diagnosticoTecnico}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Bloque de Firmas: Elaboró (Usuario Activo) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="font-bold text-slate-700">
+                      Firma Digital: Elaboró ({user?.nombre || 'Responsable Técnico'})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => sigCanvasElaboro.current?.clear()}
+                      className="text-xs text-sky-600 hover:text-sky-700 font-bold cursor-pointer"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+                  <div className="border border-slate-300 rounded-xl overflow-hidden bg-white">
+                    <SignatureCanvas
+                      ref={sigCanvasElaboro}
+                      canvasProps={{
+                        className: 'w-full h-24 bg-white cursor-crosshair'
+                      }}
+                    />
+                  </div>
+                </div>
+
               </div>
 
-              {/* Bloque de Firmas: Elaboró (Usuario Activo) */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-700">
-                    Firma Digital: Elaboró ({user?.nombre || 'Responsable Técnico'})
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => sigCanvasElaboro.current?.clear()}
-                    className="text-xs text-sky-600 hover:text-sky-700 font-bold"
-                  >
-                    Limpiar
-                  </button>
-                </div>
-                <div className="border border-slate-300 rounded-xl overflow-hidden bg-white">
-                  <SignatureCanvas
-                    ref={sigCanvasElaboro}
-                    canvasProps={{
-                      className: 'w-full h-24 bg-white cursor-crosshair'
-                    }}
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
+              {/* Pie Fijo con Botones de Acción */}
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2 border border-slate-300 rounded-lg font-bold text-slate-600 hover:bg-slate-50"
+                  className="px-4 py-2 border border-slate-300 rounded-xl font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold shadow-md"
+                  className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl font-bold shadow-md hover:shadow-lg transition cursor-pointer flex items-center gap-2"
                 >
-                  Emitir Informe Formal CRR
+                  <CheckCircle className="w-4 h-4" />
+                  <span>Emitir Informe Formal CRR</span>
                 </button>
               </div>
 
