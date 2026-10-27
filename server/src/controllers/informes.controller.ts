@@ -62,28 +62,35 @@ export class InformesController {
         return res.status(401).json({ message: 'Usuario no autenticado' });
       }
 
-      // Generar consecutivo de código CRR: CRR - 00XXX - 2026
+      // Generar consecutivo de código CRR: INF_ CRR – 00XXX - 2026
       const count = await prisma.informeCRR.count();
       const correlativo = String(count + 1).padStart(5, '0');
       const anio = new Date().getFullYear();
-      const defaultCodigo = `CRR – ${correlativo} – ${anio}`;
+      const defaultCodigo = `INF_ CRR – ${correlativo} - ${anio}`;
 
       const {
         codigoInforme = defaultCodigo,
+        tipoInforme = 'INFORME PRELIMINAR',
         titulo,
-        empresaContratista = 'CONTRATISTA INDUSTRIAL CRR',
+        empresaContratista = 'A DEFINIR',
+        observaciones = '',
         distribucion = 'Inspección Técnica Arauco / Operaciones 340CRR',
+        copiaAsignada = 'Inspección Técnica Arauco',
         avisoNumero,
         ordenNumero,
         ubicacionTecnica,
-        objetivo = 'Tratamiento anticorrosivo integral y mitigación de condiciones subestándares en estructuras y soportería.',
+        objetivo = 'Describir el objetivo de la obra o relevamiento.',
+        lugarObraTexto = 'Captura de imagen de la zona de la obra o descripción.',
+        lugarObraFotoUrl,
+        anexosTexto = 'Agregar planos o elementos que complementen al informe.',
+        anexosFotos,
         normativaArauco = 'Especificación Técnica Arauco ET-PINT-01 / Criterios HSE Mitigación de Riesgos Físicos.',
-        computosMetricos = 'Área estimada de intervención: 48.5 m² en perfiles metálicos y soportes.',
-        montajeAndamios = 'Montaje de andamios multidireccionales homologados con tarjeta verde y cálculo estructural.',
-        preparacionSuperficie = 'Limpieza con chorro abrasivo Sa 2 / Sa 2½ bajo cerramiento envolvente con contención de polvo.',
-        criterioReemplazoPerfiles = 'Pérdida de espesor por corrosión mayor o igual al 40% requiere sustitución estructural.',
-        esquemaPintura = 'Capa 1: Imprimación Epoxi rica en Zinc (75µm) + Capa 2: Epoxi MIO alto espesor (150µm) + Capa 3: Esmalte Poliuretano alifático (50µm).',
-        ordenAseoDossier = 'Limpieza final del área, retiro de residuos clasificados y entrega de dossier de calidad con medición de espesores.',
+        computosMetricos,
+        montajeAndamios,
+        preparacionSuperficie,
+        criterioReemplazoPerfiles,
+        esquemaPintura,
+        ordenAseoDossier,
         firmaElaboroUrl,
         fotos = [] // Array de { etapa: 'Antes'|'Durante'|'Después', url, diagnosticoTecnico, pieDeFoto }
       } = req.body;
@@ -91,14 +98,21 @@ export class InformesController {
       const nuevoInforme = await prisma.informeCRR.create({
         data: {
           codigoInforme,
+          tipoInforme,
           titulo: titulo || `Informe Técnico Estructural ${avisoNumero || '340CRR'}`,
           empresaContratista,
+          observaciones,
           distribucion,
+          copiaAsignada,
           responsableId: req.user.id,
           avisoNumero,
           ordenNumero,
           ubicacionTecnica,
           objetivo,
+          lugarObraTexto,
+          lugarObraFotoUrl,
+          anexosTexto,
+          anexosFotos: typeof anexosFotos === 'object' ? JSON.stringify(anexosFotos) : anexosFotos,
           normativaArauco,
           computosMetricos,
           montajeAndamios,
@@ -110,7 +124,7 @@ export class InformesController {
           fotos: {
             create: Array.isArray(fotos)
               ? fotos.map((f: any) => ({
-                  etapa: f.etapa,
+                  etapa: f.etapa || 'Antes',
                   url: f.url,
                   diagnosticoTecnico: f.diagnosticoTecnico || 'Condición observada',
                   pieDeFoto: f.pieDeFoto || ''
@@ -153,52 +167,111 @@ export class InformesController {
       const templatePath = path.resolve(__dirname, '../../../templates/informe-crr-modelo.html');
       let html = fs.readFileSync(templatePath, 'utf8');
 
-      // Reemplazar variables simples
+      // Cargar logo base64 si existe
+      let logoDataUri = '/logo-arauco.png';
+      try {
+        const logoTxtPath = path.resolve(__dirname, '../../../templates/logo-base64.txt');
+        if (fs.existsSync(logoTxtPath)) {
+          const b64 = fs.readFileSync(logoTxtPath, 'utf8').trim();
+          logoDataUri = `data:image/png;base64,${b64}`;
+        }
+      } catch (e) {
+        // Fallback a ruta estática
+      }
+
+      // Reemplazar variables del encabezado y metadatos
       html = html
+        .replace(/{{logoBase64}}/g, logoDataUri)
+        .replace(/{{tipoInforme}}/g, informe.tipoInforme || 'INFORME PRELIMINAR')
         .replace(/{{codigoInforme}}/g, informe.codigoInforme)
+        .replace(/{{titulo}}/g, informe.titulo)
+        .replace(/{{empresaContratista}}/g, informe.empresaContratista || 'A DEFINIR')
+        .replace(/{{observaciones}}/g, informe.observaciones || 'Sin observaciones registradas.')
         .replace(/{{fechaElaboracion}}/g, new Date(informe.fechaElaboracion).toLocaleDateString('es-CL'))
-        .replace(/{{empresaContratista}}/g, informe.empresaContratista)
         .replace(/{{avisoNumero}}/g, informe.avisoNumero || 'N/A')
-        .replace(/{{responsableNombre}}/g, informe.responsable?.nombre || 'Responsable Técnico')
-        .replace(/{{ordenNumero}}/g, informe.ordenNumero || 'N/A')
-        .replace(/{{distribucion}}/g, informe.distribucion)
-        .replace(/{{ubicacionTecnica}}/g, informe.ubicacionTecnica || 'Planta Industrial Arauco')
-        .replace(/{{objetivo}}/g, informe.objetivo)
-        .replace(/{{normativaArauco}}/g, informe.normativaArauco)
-        .replace(/{{tareasEstandar.computosMetricos}}/g, informe.computosMetricos)
-        .replace(/{{tareasEstandar.montajeAndamios}}/g, informe.montajeAndamios)
-        .replace(/{{tareasEstandar.preparacionSuperficie}}/g, informe.preparacionSuperficie)
-        .replace(/{{tareasEstandar.criterioReemplazoPerfiles}}/g, informe.criterioReemplazoPerfiles)
-        .replace(/{{tareasEstandar.esquemaPintura}}/g, informe.esquemaPintura)
-        .replace(/{{tareasEstandar.ordenAseoDossier}}/g, informe.ordenAseoDossier)
+        .replace(/{{distribucion}}/g, informe.distribucion || 'Inspección Técnica Arauco / Operaciones 340CRR')
+        .replace(/{{copiaAsignada}}/g, informe.copiaAsignada || 'Inspección Técnica Arauco')
+        .replace(/{{ubicacionTecnica}}/g, informe.ubicacionTecnica || 'Planta Industrial Celulosa Puerto Esperanza')
+        .replace(/{{responsableNombre}}/g, informe.responsable?.nombre || 'DAC.')
         .replace(/{{aprobadorNombre}}/g, informe.aprobadorNombre || 'Inspección Técnica Arauco');
 
-      // Renderizar fotos en grilla 2 columnas
+      // Sección 1: Objetivo
+      html = html.replace(/{{objetivo}}/g, informe.objetivo || 'Describir el objetivo de la obra o relevamiento.');
+
+      // Sección 2: Lugar de la obra
+      html = html.replace(/{{lugarObraTexto}}/g, informe.lugarObraTexto || 'Captura de imagen de la zona de la obra o descripción.');
+      if (informe.lugarObraFotoUrl) {
+        html = html
+          .replace('{{#if lugarObraFotoUrl}}', '')
+          .replace('{{/if}}', '')
+          .replace(/{{lugarObraFotoUrl}}/g, informe.lugarObraFotoUrl);
+      } else {
+        html = html.replace(/{{#if lugarObraFotoUrl}}[\s\S]*?{{else}}/, '').replace('{{/if}}', '');
+      }
+
+      // Sección 3: Registro fotográfico
       let fotosHtml = '';
-      for (const foto of informe.fotos) {
-        const etapaClass = foto.etapa.toLowerCase().replace(/[^a-z]/g, '');
-        fotosHtml += `
-          <div class="photo-card">
-            <img src="${foto.url}" alt="Evidencia Fotográfica" class="photo-img"/>
-            <div class="photo-body">
-              <span class="badge-etapa badge-${etapaClass}">${foto.etapa}</span>
-              <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px;">${foto.diagnosticoTecnico}</div>
-              <div style="color: #64748b; font-size: 8.5pt;">${foto.pieDeFoto}</div>
+      if (informe.fotos && informe.fotos.length > 0) {
+        for (const foto of informe.fotos) {
+          const etapaClass = (foto.etapa || 'general').toLowerCase().replace(/[^a-z]/g, '');
+          fotosHtml += `
+            <div class="photo-card">
+              <img src="${foto.url}" alt="Evidencia Fotográfica" class="photo-card-img" />
+              <div class="photo-card-body">
+                <span class="badge-etapa badge-${etapaClass}">${foto.etapa || 'Evidencia'}</span>
+                <div class="photo-diagnostico">${foto.diagnosticoTecnico || 'Registro de campo'}</div>
+                <div class="photo-pie">${foto.pieDeFoto || ''}</div>
+              </div>
             </div>
+          `;
+        }
+      } else {
+        fotosHtml = `
+          <div style="grid-column: 1 / -1; padding: 18px; text-align: center; color: #94a3b8; font-size: 9pt; border: 1px dashed #cbd5e1; border-radius: 6px;">
+            No se han registrado evidencias fotográficas en este informe.
           </div>
         `;
       }
-      html = html.replace('{{#galeriaFotos}}', '').replace('{{/galeriaFotos}}', '').replace(/<div class="photo-card">[\s\S]*?<\/div>\s*<\/div>/, fotosHtml);
+      html = html.replace('{{fotosHtml}}', fotosHtml);
+
+      // Sección 4: Anexos
+      html = html.replace(/{{anexosTexto}}/g, informe.anexosTexto || 'Agregar planos o elementos que complementen al informe.');
+      let anexosFotosHtml = '';
+      if (informe.anexosFotos) {
+        try {
+          const parsed = JSON.parse(informe.anexosFotos);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            anexosFotosHtml = '<div class="anexos-grid">';
+            for (const item of parsed) {
+              const url = typeof item === 'string' ? item : item.url;
+              anexosFotosHtml += `<img src="${url}" alt="Anexo Plano o Elemento" class="anexo-item-img" />`;
+            }
+            anexosFotosHtml += '</div>';
+          }
+        } catch (e) {
+          // Si es una sola URL directa
+          if (informe.anexosFotos.startsWith('data:') || informe.anexosFotos.startsWith('http')) {
+            anexosFotosHtml = `<div class="anexos-grid"><img src="${informe.anexosFotos}" alt="Anexo Plano" class="anexo-item-img" /></div>`;
+          }
+        }
+      }
+      html = html.replace('{{anexosFotosHtml}}', anexosFotosHtml);
 
       // Firmas
       if (informe.firmaElaboroUrl) {
-        html = html.replace('{{firmaElaboroUrl}}', informe.firmaElaboroUrl).replace('{{#if firmaElaboroUrl}}', '').replace('{{/if}}', '');
+        html = html
+          .replace('{{#if firmaElaboroUrl}}', '')
+          .replace('{{/if}}', '')
+          .replace('{{firmaElaboroUrl}}', informe.firmaElaboroUrl);
       } else {
         html = html.replace(/{{#if firmaElaboroUrl}}[\s\S]*?{{\/if}}/, '');
       }
 
       if (informe.firmaAproboUrl) {
-        html = html.replace('{{firmaAproboUrl}}', informe.firmaAproboUrl).replace('{{#if firmaAproboUrl}}', '').replace('{{/if}}', '');
+        html = html
+          .replace('{{#if firmaAproboUrl}}', '')
+          .replace('{{/if}}', '')
+          .replace('{{firmaAproboUrl}}', informe.firmaAproboUrl);
       } else {
         html = html.replace(/{{#if firmaAproboUrl}}[\s\S]*?{{\/if}}/, '');
       }

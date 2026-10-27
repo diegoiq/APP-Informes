@@ -2,287 +2,511 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Informe Técnico CRR - Modelo Arauco</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{codigoInforme}} - {{tipoInforme}}</title>
   <style>
     @page {
       size: A4;
-      margin: 20mm 15mm 20mm 15mm;
+      margin: 15mm 15mm 15mm 15mm;
       @bottom-right {
         content: "Página " counter(page) " de " counter(pages);
       }
     }
+    * {
+      box-sizing: border-box;
+    }
     body {
-      font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+      font-family: Calibri, 'Segoe UI', Arial, Helvetica, sans-serif;
       color: #1e293b;
       margin: 0;
-      padding: 24px;
-      line-height: 1.5;
+      padding: 20px;
+      line-height: 1.45;
       background: #ffffff;
       font-size: 11pt;
     }
+    @media print {
+      body {
+        padding: 0;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .page-break {
+        page-break-before: always;
+      }
+    }
+
+    /* BARRA DE ACCIÓN SUPERIOR (MÓVIL / PANTALLA) */
+    .action-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 12px 18px;
+      border-radius: 10px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+    }
+    .action-bar .btn-print {
+      background: #0284c7;
+      color: #ffffff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 6px;
+      font-weight: 700;
+      font-size: 10pt;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .action-bar .btn-print:hover {
+      background: #0369a1;
+    }
+
+    /* ENCABEZADO OFICIAL MODELO DOCX */
     .header-table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 25px;
-      border: 2px solid #0f172a;
+      margin-bottom: 22px;
+      border: 1.5px solid #0f172a;
     }
     .header-table td {
-      border: 1px solid #334155;
-      padding: 10px 14px;
+      border: 1px solid #475569;
+      padding: 8px 12px;
       vertical-align: middle;
     }
-    .brand-title {
+    .header-logo-container {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .header-logo-img {
+      max-height: 52px;
+      max-width: 170px;
+      object-fit: contain;
+    }
+    .header-left-text {
+      font-size: 9pt;
+      line-height: 1.25;
+      color: #0f172a;
+    }
+    .header-left-dept {
+      font-weight: 800;
+      color: #0f172a;
+      font-size: 9.5pt;
+    }
+    .header-left-sub {
+      color: #1e293b;
+      font-weight: 600;
+    }
+    .header-left-iso {
+      font-size: 8pt;
+      color: #475569;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+    .header-right-text {
+      font-size: 8.5pt;
+      text-align: right;
+      line-height: 1.35;
+      color: #0f172a;
+    }
+    .header-right-dept {
+      font-weight: 700;
+    }
+    .header-right-rev {
+      font-weight: 800;
+      color: #0369a1;
+    }
+
+    /* BLOQUE DE TÍTULO PRINCIPAL (IDÉNTICO A MODELO DOCX) */
+    .title-block {
+      text-align: center;
+      margin-top: 10px;
+      margin-bottom: 22px;
+    }
+    .doc-type {
       font-size: 16pt;
       font-weight: 800;
       color: #0f172a;
-      letter-spacing: -0.5px;
-      margin: 0;
-    }
-    .report-code {
-      font-size: 14pt;
-      font-weight: 700;
-      color: #0369a1;
-      text-align: right;
-    }
-    .meta-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      background: #f8fafc;
-      border: 1px solid #cbd5e1;
-      border-radius: 6px;
-      padding: 14px;
-      margin-bottom: 24px;
-      font-size: 10pt;
-    }
-    .meta-item strong {
-      color: #0f172a;
-      display: inline-block;
-      width: 150px;
-    }
-    h2.section-title {
-      font-size: 13pt;
-      color: #0f172a;
-      border-bottom: 2px solid #0284c7;
-      padding-bottom: 6px;
-      margin-top: 24px;
-      margin-bottom: 12px;
-      text-transform: uppercase;
       letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
     }
-    h3.sub-title {
-      font-size: 11pt;
-      color: #0369a1;
-      margin-top: 14px;
+    .doc-code {
+      font-size: 15pt;
+      font-weight: 800;
+      color: #0284c7;
+      letter-spacing: 0.5px;
+      font-style: italic;
       margin-bottom: 6px;
     }
-    .callout-box {
-      background: #eff6ff;
-      border-left: 4px solid #0284c7;
-      padding: 12px 16px;
-      border-radius: 0 6px 6px 0;
-      margin: 14px 0;
-      font-size: 10pt;
+    .doc-title {
+      font-size: 14pt;
+      font-weight: 700;
+      color: #1e293b;
+      font-style: italic;
+      text-transform: uppercase;
+      max-width: 85%;
+      margin: 0 auto;
     }
-    .task-table {
+
+    /* TABLA DE METADATOS MODELO DOCX */
+    .meta-table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 10px;
-      margin-bottom: 20px;
-      font-size: 10pt;
-    }
-    .task-table th, .task-table td {
+      margin-bottom: 24px;
       border: 1px solid #cbd5e1;
-      padding: 8px 12px;
-      text-align: left;
+      background: #f8fafc;
+      font-size: 9.5pt;
     }
-    .task-table th {
-      background: #f1f5f9;
-      color: #0f172a;
+    .meta-table td {
+      padding: 7px 12px;
+      border: 1px solid #e2e8f0;
+    }
+    .meta-table td.label-cell {
+      width: 180px;
       font-weight: 700;
+      color: #0f172a;
+      background: #f1f5f9;
+      text-decoration: underline;
     }
+    .meta-table td.value-cell {
+      color: #1e293b;
+      font-weight: 600;
+    }
+
+    /* SECCIONES NUMERADAS FORMALES */
+    .section-container {
+      margin-bottom: 26px;
+      page-break-inside: avoid;
+    }
+    .section-title {
+      font-size: 12pt;
+      font-weight: 800;
+      color: #0f172a;
+      text-transform: uppercase;
+      margin-top: 0;
+      margin-bottom: 4px;
+      border-bottom: 1.5px solid #0284c7;
+      padding-bottom: 3px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .section-note {
+      font-size: 8.5pt;
+      font-style: italic;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+    .section-content {
+      font-size: 10pt;
+      color: #334155;
+      line-height: 1.5;
+      text-align: justify;
+    }
+
+    /* SECCIÓN 2: LUGAR DE LA OBRA (PANORÁMICA + DESCRIPCIÓN) */
+    .location-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      background: #f8fafc;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+    .location-img {
+      width: 100%;
+      max-height: 340px;
+      object-fit: cover;
+      display: block;
+      background: #e2e8f0;
+    }
+    .location-desc {
+      padding: 10px 14px;
+      font-size: 9.5pt;
+      color: #1e293b;
+      background: #ffffff;
+      border-top: 1px solid #e2e8f0;
+    }
+
+    /* SECCIÓN 3: REGISTRO FOTOGRÁFICO A 2 COLUMNAS */
     .photo-grid-2col {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 16px;
-      margin-top: 16px;
-      page-break-inside: avoid;
+      margin-top: 10px;
+    }
+    @media (max-width: 600px) {
+      .photo-grid-2col {
+        grid-template-columns: 1fr;
+      }
     }
     .photo-card {
       border: 1px solid #cbd5e1;
       border-radius: 6px;
       overflow: hidden;
-      background: #f8fafc;
+      background: #ffffff;
       display: flex;
       flex-direction: column;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+      page-break-inside: avoid;
     }
-    .photo-img {
+    .photo-card-img {
       width: 100%;
-      height: 220px;
+      height: 200px;
       object-fit: cover;
-      background: #e2e8f0;
+      background: #f1f5f9;
       display: block;
     }
-    .photo-body {
-      padding: 10px 12px;
-      font-size: 9.5pt;
+    .photo-card-body {
+      padding: 9px 12px;
+      font-size: 9pt;
       flex: 1;
     }
     .badge-etapa {
       display: inline-block;
-      padding: 2px 8px;
+      padding: 2px 7px;
       border-radius: 4px;
-      font-size: 8pt;
-      font-weight: 700;
+      font-size: 7.5pt;
+      font-weight: 800;
       text-transform: uppercase;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
+      letter-spacing: 0.5px;
     }
-    .badge-antes { background: #fee2e2; color: #991b1b; }
-    .badge-durante { background: #fef3c7; color: #92400e; }
-    .badge-despues { background: #dcfce7; color: #166534; }
-    .signatures-container {
+    .badge-antes { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+    .badge-durante { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .badge-despues { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .badge-general { background: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
+    .photo-diagnostico {
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 3px;
+    }
+    .photo-pie {
+      color: #64748b;
+      font-size: 8.5pt;
+    }
+
+    /* SECCIÓN 4: ANEXOS */
+    .anexos-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 12px 16px;
+      background: #f8fafc;
+      font-size: 9.5pt;
+      color: #334155;
+    }
+    .anexos-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 10px;
+    }
+    .anexo-item-img {
+      width: 100%;
+      height: 160px;
+      object-fit: cover;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      display: block;
+    }
+
+    /* FOOTER FORMAL DE FIRMAS */
+    .signatures-block {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 40px;
-      margin-top: 45px;
+      gap: 36px;
+      margin-top: 40px;
       page-break-inside: avoid;
     }
-    .signature-box {
-      border-top: 2px solid #0f172a;
-      text-align: center;
-      padding-top: 12px;
-      position: relative;
+    @media (max-width: 600px) {
+      .signatures-block {
+        grid-template-columns: 1fr;
+        gap: 20px;
+      }
     }
-    .signature-canvas-img {
-      max-height: 70px;
+    .signature-card {
+      border-top: 2px solid #0f172a;
+      padding-top: 10px;
+      text-align: center;
+    }
+    .sig-canvas-img {
+      max-height: 65px;
       margin-bottom: 6px;
       display: block;
       margin-left: auto;
       margin-right: auto;
     }
-    .signature-role {
-      font-weight: 700;
+    .sig-role {
+      font-weight: 800;
+      font-size: 10pt;
       color: #0f172a;
-      font-size: 10.5pt;
     }
-    .signature-name {
+    .sig-name {
+      font-size: 9pt;
       color: #475569;
-      font-size: 9.5pt;
+      margin-top: 2px;
+    }
+    .sig-dept {
+      font-size: 8pt;
+      color: #94a3b8;
+    }
+    .footer-note {
+      text-align: center;
+      font-size: 8pt;
+      color: #94a3b8;
+      margin-top: 32px;
+      border-top: 1px dashed #cbd5e1;
+      padding-top: 10px;
     }
   </style>
 </head>
 <body>
 
-  <!-- ENCABEZADO FORMAL -->
+  <!-- BARRA DE ACCIÓN (PANTALLA / MÓVIL) -->
+  <div class="action-bar no-print">
+    <div>
+      <strong style="font-size: 11pt;">{{codigoInforme}}</strong>
+      <div style="font-size: 8.5pt; color: #94a3b8;">Modelo Oficial Celulosa Puerto Esperanza Arauco</div>
+    </div>
+    <button onclick="window.print()" class="btn-print">
+      🖨️ Imprimir / Guardar PDF
+    </button>
+  </div>
+
+  <!-- ENCABEZADO FORMAL INSTITUCIONAL -->
   <table class="header-table">
     <tr>
-      <td style="width: 25%; text-align: center;">
-        <div style="font-weight: 900; font-size: 15pt; color: #166534;">ARAUCO</div>
-        <div style="font-size: 8pt; color: #64748b;">Planta Industrial</div>
+      <td style="width: 65%;">
+        <div class="header-logo-container">
+          <img src="{{logoBase64}}" alt="Logo Arauco Celulosa Puerto Esperanza" class="header-logo-img" />
+          <div class="header-left-text">
+            <div class="header-left-dept">Departamento de Corrosión - Sub Gerencia de Mantenimiento</div>
+            <div class="header-left-sub">Celulosa Puerto Esperanza.</div>
+            <div class="header-left-iso">ISO 14001 &nbsp;&nbsp;&nbsp; OHSAS 18001</div>
+          </div>
+        </div>
       </td>
-      <td style="width: 50%; text-align: center;">
-        <h1 class="brand-title">INFORME TÉCNICO DE CONDICIÓN SUBESTÁNDAR</h1>
-        <div style="font-size: 9pt; color: #475569; margin-top: 4px;">Servicio de Mantenimiento y Reparación Estructural 340CRR</div>
-      </td>
-      <td style="width: 25%;">
-        <div class="report-code">{{codigoInforme}}</div>
-        <div style="font-size: 8pt; text-align: right; color: #64748b; margin-top: 4px;">Fecha: {{fechaElaboracion}}</div>
+      <td style="width: 35%;">
+        <div class="header-right-text">
+          <div class="header-right-dept">Servicios Auxiliares. Dpto.</div>
+          <div class="header-right-rev">Revisión: 01</div>
+          <div>Puesto de Trabajo: <strong>340CRR</strong></div>
+        </div>
       </td>
     </tr>
   </table>
 
-  <!-- METADATOS DEL REQUERIMIENTO -->
-  <div class="meta-grid">
-    <div class="meta-item"><strong>Empresa Contratista:</strong> {{empresaContratista}}</div>
-    <div class="meta-item"><strong>N° Aviso SAP:</strong> {{avisoNumero}}</div>
-    <div class="meta-item"><strong>Responsable Emisor:</strong> {{responsableNombre}}</div>
-    <div class="meta-item"><strong>N° Orden SAP:</strong> {{ordenNumero}}</div>
-    <div class="meta-item"><strong>Distribución:</strong> {{distribucion}}</div>
-    <div class="meta-item"><strong>Ubicación Técnica:</strong> {{ubicacionTecnica}}</div>
+  <!-- BLOQUE DE TÍTULO PRINCIPAL -->
+  <div class="title-block">
+    <div class="doc-type">{{tipoInforme}}</div>
+    <div class="doc-code">{{codigoInforme}}</div>
+    <div class="doc-title">{{titulo}}</div>
   </div>
 
-  <!-- 1. OBJETIVO Y NORMATIVA -->
-  <h2 class="section-title">1. Objetivo y Marco Normativo</h2>
-  <p>{{objetivo}}</p>
-  <div class="callout-box">
-    <strong>Normativa Aplicable Arauco:</strong> {{normativaArauco}}
-    <br/>
-    <em>Mitigación de riesgos operacionales y aseguramiento de la integridad estructural según estándares HSE de planta.</em>
-  </div>
-
-  <!-- 2. TAREAS A REALIZAR ESTANDARIZADAS -->
-  <h2 class="section-title">2. Alcance Técnico y Tareas Estandarizadas</h2>
-  <table class="task-table">
+  <!-- TABLA DE METADATOS DEL INFORME -->
+  <table class="meta-table">
     <tr>
-      <th style="width: 15%;">Ítem</th>
-      <th style="width: 35%;">Descripción Operativa</th>
-      <th style="width: 50%;">Criterio Técnico / Especificación Arauco</th>
+      <td class="label-cell">EMPRESA:</td>
+      <td class="value-cell" colspan="3">{{empresaContratista}}</td>
     </tr>
     <tr>
-      <td><strong>2.1</strong></td>
-      <td>Cómputos métricos</td>
-      <td>{{tareasEstandar.computosMetricos}}</td>
+      <td class="label-cell">Observaciones:</td>
+      <td class="value-cell" colspan="3">{{observaciones}}</td>
     </tr>
     <tr>
-      <td><strong>2.2</strong></td>
-      <td>Montaje de andamios</td>
-      <td>{{tareasEstandar.montajeAndamios}} (Andamios multidireccionales certificados con memoria de cálculo)</td>
+      <td class="label-cell">Fecha:</td>
+      <td class="value-cell">{{fechaElaboracion}}</td>
+      <td class="label-cell" style="width: 140px;">N° Aviso SAP:</td>
+      <td class="value-cell">{{avisoNumero}}</td>
     </tr>
     <tr>
-      <td><strong>2.3</strong></td>
-      <td>Preparación de superficie</td>
-      <td>{{tareasEstandar.preparacionSuperficie}} (Granallado/arenado Sa 2 / Sa 2½ bajo cerramiento envolvente)</td>
+      <td class="label-cell">Distribución:</td>
+      <td class="value-cell" colspan="3">{{distribucion}}</td>
     </tr>
     <tr>
-      <td><strong>2.4</strong></td>
-      <td>Criterio de reemplazo</td>
-      <td>{{tareasEstandar.criterioReemplazoPerfiles}} (Pérdida de sección nominal calculada ≥ 40%)</td>
-    </tr>
-    <tr>
-      <td><strong>2.5</strong></td>
-      <td>Esquema de pintura</td>
-      <td>{{tareasEstandar.esquemaPintura}} (Imprimación Epoxi rica en Zinc + Epoxi Intermedio MIO + Esmalte Poliuretano Alifático)</td>
-    </tr>
-    <tr>
-      <td><strong>2.6</strong></td>
-      <td>Orden, aseo y dossier</td>
-      <td>{{tareasEstandar.ordenAseoDossier}} (Disposición de residuos certificados y dossier de calidad)</td>
+      <td class="label-cell">Copia asignada a:</td>
+      <td class="value-cell">{{copiaAsignada}}</td>
+      <td class="label-cell">Ubicación Técnica:</td>
+      <td class="value-cell">{{ubicacionTecnica}}</td>
     </tr>
   </table>
 
-  <!-- 3. GRILLA FOTOGRÁFICA A 2 COLUMNAS -->
-  <h2 class="section-title">3. Registro Fotográfico y Diagnósticos de Campo</h2>
-  <div class="photo-grid-2col">
-    {{#galeriaFotos}}
-    <div class="photo-card">
-      <img src="{{url}}" alt="Evidencia Fotográfica" class="photo-img"/>
-      <div class="photo-body">
-        <span class="badge-etapa badge-{{etapaClass}}">{{etapa}}</span>
-        <div style="font-weight: 700; color: #0f172a; margin-bottom: 4px;">{{diagnosticoTecnico}}</div>
-        <div style="color: #64748b; font-size: 8.5pt;">{{pieDeFoto}}</div>
+  <!-- SECCIÓN 1: OBJETIVO -->
+  <div class="section-container">
+    <div class="section-title">1. OBJETIVO.</div>
+    <div class="section-note">Nota: Describir el objetivo de la obra o relevamiento.</div>
+    <div class="section-content">
+      {{objetivo}}
+    </div>
+  </div>
+
+  <!-- SECCIÓN 2: LUGAR DE LA OBRA -->
+  <div class="section-container">
+    <div class="section-title">2. LUGAR DE LA OBRA.</div>
+    <div class="section-note">Nota1: Captura de imagen de la zona de la obra o descripción.</div>
+    
+    {{#if lugarObraFotoUrl}}
+    <div class="location-box">
+      <img src="{{lugarObraFotoUrl}}" alt="Panorámica Zona de Obra" class="location-img" />
+      <div class="location-desc">
+        <strong>Zona Intervenida:</strong> {{lugarObraTexto}}
       </div>
     </div>
-    {{/galeriaFotos}}
+    {{else}}
+    <div class="section-content" style="background: #f8fafc; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px;">
+      {{lugarObraTexto}}
+    </div>
+    {{/if}}
   </div>
 
-  <!-- 4. BLOQUE FORMAL DE FIRMAS -->
-  <div class="signatures-container">
-    <div class="signature-box">
+  <!-- SECCIÓN 3: REGISTRO FOTOGRÁFICO -->
+  <div class="section-container">
+    <div class="section-title">3. REGISTRO FOTOGRÁFICO.</div>
+    <div class="section-note">Nota2: Cargar fotos con comentarios del registro.</div>
+    
+    <div class="photo-grid-2col">
+      {{fotosHtml}}
+    </div>
+  </div>
+
+  <!-- SECCIÓN 4: ANEXOS -->
+  <div class="section-container">
+    <div class="section-title">4. ANEXOS.</div>
+    <div class="section-note">Nota3: Agregar planos o elementos que complementen al informe.</div>
+    <div class="anexos-box">
+      <div>{{anexosTexto}}</div>
+      {{anexosFotosHtml}}
+    </div>
+  </div>
+
+  <!-- FOOTER / BLOQUE FORMAL DE FIRMAS -->
+  <div class="signatures-block">
+    <div class="signature-card">
       {{#if firmaElaboroUrl}}
-      <img src="{{firmaElaboroUrl}}" class="signature-canvas-img" alt="Firma Responsable Emisor"/>
+      <img src="{{firmaElaboroUrl}}" alt="Firma Elaboró" class="sig-canvas-img" />
       {{/if}}
-      <div class="signature-role">ELABORÓ / RESPONSABLE TÉCNICO</div>
-      <div class="signature-name">{{responsableNombre}}</div>
-      <div style="font-size: 8pt; color: #94a3b8;">APP-Informes | Puesto 340CRR</div>
+      <div class="sig-role">PREPARÓ: DAC. / RESPONSABLE TÉCNICO</div>
+      <div class="sig-name">{{responsableNombre}}</div>
+      <div class="sig-dept">Dpto. Corrosión - Sub Gerencia Mantenimiento</div>
     </div>
-    <div class="signature-box">
+
+    <div class="signature-card">
       {{#if firmaAproboUrl}}
-      <img src="{{firmaAproboUrl}}" class="signature-canvas-img" alt="Firma Aprobador Planta"/>
+      <img src="{{firmaAproboUrl}}" alt="Firma Aprobó" class="sig-canvas-img" />
       {{/if}}
-      <div class="signature-role">APROBÓ / INSPECCIÓN TÉCNICA</div>
-      <div class="signature-name">{{aprobadorNombre}}</div>
-      <div style="font-size: 8pt; color: #94a3b8;">Inspección Técnica de Planta Arauco</div>
+      <div class="sig-role">APROBÓ: INSPECCIÓN TÉCNICA</div>
+      <div class="sig-name">{{aprobadorNombre}}</div>
+      <div class="sig-dept">Servicios Auxiliares - Celulosa Puerto Esperanza</div>
     </div>
+  </div>
+
+  <div class="footer-note">
+    Documento oficial generado según especificación técnica modelo CRR - Celulosa Puerto Esperanza Arauco.
   </div>
 
 </body>

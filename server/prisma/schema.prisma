@@ -285,25 +285,33 @@ model FotoBitacora {
 // =====================================================================
 model InformeCRR {
   id                       String            @id @default(uuid())
-  codigoInforme            String            @unique @map("codigo_informe") // Ej: CRR – 00124 – 2026
+  codigoInforme            String            @unique @map("codigo_informe") // Ej: INF_ CRR – 00124 - 2026
   titulo                   String
+  tipoInforme              String?           @default("INFORME PRELIMINAR") @map("tipo_informe")
   empresaContratista       String            @default("CONTRATISTA INDUSTRIAL CRR") @map("empresa_contratista")
+  observaciones            String?
   distribucion             String            @default("Inspección Técnica Arauco / Operaciones 340CRR")
+  copiaAsignada            String?           @default("Inspección Técnica Arauco") @map("copia_asignada")
   responsableId            String            @map("responsable_id")
   responsable              Usuario           @relation("ResponsableInforme", fields: [responsableId], references: [id])
   avisoNumero              String?           @map("aviso_numero")
   ordenNumero              String?           @map("orden_numero")
   ubicacionTecnica         String?           @map("ubicacion_tecnica")
   objetivo                 String
-  normativaArauco          String            @map("normativa_arauco")
+  lugarObraTexto           String?           @map("lugar_obra_texto")
+  lugarObraFotoUrl         String?           @map("lugar_obra_foto_url")
+  normativaArauco          String?           @default("Especificación Técnica Arauco ET-PINT-01") @map("normativa_arauco")
   
-  // Tareas Estandarizadas
-  computosMetricos         String            @map("computos_metricos")
-  montajeAndamios          String            @map("montaje_andamios")
-  preparacionSuperficie    String            @map("preparacion_superficie")
-  criterioReemplazoPerfiles String           @map("criterio_reemplazo_perfiles")
-  esquemaPintura           String            @map("esquema_pintura")
-  ordenAseoDossier         String            @map("orden_aseo_dossier")
+  // Tareas Estandarizadas (Opcionales)
+  computosMetricos         String?           @map("computos_metricos")
+  montajeAndamios          String?           @map("montaje_andamios")
+  preparacionSuperficie    String?           @map("preparacion_superficie")
+  criterioReemplazoPerfiles String?          @map("criterio_reemplazo_perfiles")
+  esquemaPintura           String?           @map("esquema_pintura")
+  ordenAseoDossier         String?           @map("orden_aseo_dossier")
+
+  anexosTexto              String?           @map("anexos_texto")
+  anexosFotos              String?           @map("anexos_fotos")
 
   firmaElaboroUrl          String?           @map("firma_elaboro_url")
   firmaAproboUrl           String?           @map("firma_aprobo_url")

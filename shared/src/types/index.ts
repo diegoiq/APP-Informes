@@ -304,19 +304,26 @@ export interface FotoInformeCRR {
 
 export interface InformeCRR {
   id: string;
-  codigoInforme: string; // Ej: CRR – 00124 – 2026
+  codigoInforme: string; // Ej: INF_ CRR – 00124 - 2026
   titulo: string;
+  tipoInforme?: string; // Ej: INFORME PRELIMINAR, INFORME CRR, etc.
   empresaContratista: string;
+  observaciones?: string;
   distribucion: string;
+  copiaAsignada?: string;
   responsableId: string;
   responsableNombre: string;
   avisoNumero?: string;
   ordenNumero?: string;
   ubicacionTecnica?: string;
   objetivo: string;
-  normativaArauco: string;
-  tareasEstandar: TareasCRR;
+  lugarObraTexto?: string;
+  lugarObraFotoUrl?: string;
+  normativaArauco?: string;
+  tareasEstandar?: TareasCRR;
   galeriaFotos: FotoInformeCRR[];
+  anexosTexto?: string;
+  anexosFotos?: string;
   firmaElaboroUrl?: string;
   firmaAproboUrl?: string;
   aprobadorNombre?: string;
