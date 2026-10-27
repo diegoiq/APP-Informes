@@ -305,6 +305,197 @@ export class AvisosController {
   }
 
   /**
+   * Relevamiento de terreno y movilización de requerimiento a Parada Semanal (PS) con HH
+   */
+  public static async guardarRelevamiento(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const {
+        comentariosTerreno,
+        fotosInspeccion,
+        horasEstimadas,
+        personasEstimadas,
+        revisionPs,
+        diaSemana = 'mi'
+      } = req.body;
+
+      const aviso = await prisma.aviso.findUnique({
+        where: { id }
+      });
+
+      if (!aviso) {
+        return res.status(404).json({ message: 'Aviso no encontrado' });
+      }
+
+      const hs = Number(horasEstimadas) || 0;
+      const personas = Math.max(1, Number(personasEstimadas) || 1);
+      const totalHH = hs * personas;
+
+      let serializedFotos: string | undefined = undefined;
+      if (Array.isArray(fotosInspeccion)) {
+        serializedFotos = JSON.stringify(fotosInspeccion);
+      } else if (typeof fotosInspeccion === 'string') {
+        serializedFotos = fotosInspeccion;
+      }
+
+      const revPsClean = revisionPs ? String(revisionPs).trim().toUpperCase() : 'PS43';
+
+      // 1. Actualizar campos protegidos de terreno en el Aviso
+      const updatedAviso = await prisma.aviso.update({
+        where: { id },
+        data: {
+          comentariosTerreno: comentariosTerreno !== undefined ? String(comentariosTerreno) : aviso.comentariosTerreno,
+          notasCampo: comentariosTerreno !== undefined ? String(comentariosTerreno) : aviso.notasCampo,
+          fotosInspeccion: serializedFotos !== undefined ? serializedFotos : aviso.fotosInspeccion,
+          revisionPs: revPsClean,
+          revision: revPsClean,
+          hhEstimadasTerreno: totalHH,
+          personasEstimadas: personas,
+          horasRealesIncurridas: totalHH,
+          hhRealesAcumuladas: totalHH,
+          faseAvance: '2. En Ejecución'
+        }
+      });
+
+      // 2. Extraer semana y año del código de parada (ej: PS43, PS442026, PS50)
+      let semanaNum = 43;
+      let anioNum = 2026;
+      const match = revPsClean.match(/PS(\d{1,2})(?:(\d{4}))?/i);
+      if (match) {
+        semanaNum = parseInt(match[1], 10);
+        if (match[2]) anioNum = parseInt(match[2], 10);
+      }
+
+      const ptoTbjo = aviso.ptoTbjoResponsable || '340CRR';
+
+      // 3. Asegurar que exista la dotación semanal para que compute la capacidad neta
+      let dotacion = await prisma.dotacionSemanalArauco.findUnique({
+        where: {
+          semana_anio_ptoTbjo: {
+            semana: semanaNum,
+            anio: anioNum,
+            ptoTbjo
+          }
+        }
+      });
+
+      if (!dotacion) {
+        const baseDate = new Date(anioNum, 0, 1);
+        const dayOffset = (semanaNum - 1) * 7;
+        const fechaInicio = new Date(baseDate.getTime() + (dayOffset + 2) * 86400000);
+        const fechaFin = new Date(fechaInicio.getTime() + 6 * 86400000);
+
+        dotacion = await prisma.dotacionSemanalArauco.create({
+          data: {
+            semana: semanaNum,
+            anio: anioNum,
+            ptoTbjo,
+            grupoPlanif: 'TA1',
+            fechaInicio,
+            fechaFin,
+            opMiercoles: 7,
+            opJueves: 8,
+            opViernes: 8,
+            opSabado: 0,
+            opDomingo: 0,
+            opLunes: 7,
+            opMartes: 8,
+            horasJornada: 7,
+            activo: true
+          }
+        });
+      }
+
+      // 4. Impactar la demanda de HH en la semana seleccionada (OperacionOM)
+      const numOrden = aviso.numeroOrden || `OT-${aviso.numeroAviso}`;
+      let operacion = await prisma.operacionOM.findFirst({
+        where: {
+          OR: [
+            { avisoId: aviso.id },
+            { numeroOrden: numOrden }
+          ]
+        }
+      });
+
+      const dayKey = String(diaSemana).toLowerCase();
+      const dailyHH = {
+        hhMiercoles: dayKey === 'mi' ? totalHH : 0,
+        hhJueves: dayKey === 'ju' ? totalHH : 0,
+        hhViernes: dayKey === 'vi' ? totalHH : 0,
+        hhSabado: dayKey === 'sa' ? totalHH : 0,
+        hhDomingo: dayKey === 'dom' ? totalHH : 0,
+        hhLunes: dayKey === 'lu' ? totalHH : 0,
+        hhMartes: dayKey === 'ma' ? totalHH : 0,
+      };
+
+      if (operacion) {
+        operacion = await prisma.operacionOM.update({
+          where: { id: operacion.id },
+          data: {
+            avisoId: aviso.id,
+            semanaProg: semanaNum,
+            anioProg: anioNum,
+            revision: revPsClean,
+            horasEstimadas: totalHH,
+            hhTotalProgramado: totalHH,
+            ...dailyHH,
+            activo: true
+          }
+        });
+      } else {
+        operacion = await prisma.operacionOM.create({
+          data: {
+            numeroOrden: numOrden,
+            numeroOperacion: '0010',
+            textoOperacion: `${aviso.descripcion.substring(0, 90)} [Relevado Terreno]`,
+            ubicacionTecnica: aviso.ubicacionTecnica,
+            ptoTbjo,
+            revision: revPsClean,
+            horasEstimadas: totalHH,
+            semanaProg: semanaNum,
+            anioProg: anioNum,
+            hhTotalProgramado: totalHH,
+            ...dailyHH,
+            avisoId: aviso.id,
+            activo: true
+          }
+        });
+      }
+
+      return res.json({
+        message: `Aviso ${aviso.numeroAviso} relevado y movilizado a ${revPsClean} (${totalHH} HH impactadas)`,
+        aviso: updatedAviso,
+        operacion,
+        semana: semanaNum,
+        anio: anioNum,
+        totalHH
+      });
+    } catch (error: any) {
+      console.error('Error al guardar relevamiento y movilizar a PS:', error);
+      return res.status(500).json({
+        message: 'Error al procesar relevamiento y movilización',
+        error: error.message || String(error)
+      });
+    }
+  }
+
+  /**
+   * Soft-delete de aviso
+   */
+  public static async deleteAviso(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      await prisma.aviso.update({
+        where: { id },
+        data: { activo: false }
+      });
+      return res.json({ message: 'Aviso marcado como inactivo (soft-delete)' });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Error al eliminar aviso', error: error.message });
+    }
+  }
+
+  /**
    * Descarga la plantilla o archivo de muestra Panel-Avisos-OM.xlsx
    */
   public static async downloadSample(req: Request, res: Response) {

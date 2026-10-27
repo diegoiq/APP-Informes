@@ -30,6 +30,8 @@ router.get('/avisos/revisiones', AvisosController.getRevisiones);
 router.get('/avisos', AvisosController.list);
 router.get('/avisos/:id', AvisosController.getById);
 router.patch('/avisos/:id', authMiddleware as any, AvisosController.updateFieldData as any);
+router.post('/avisos/:id/relevamiento', authMiddleware as any, AvisosController.guardarRelevamiento as any);
+router.delete('/avisos/:id', authMiddleware as any, AvisosController.deleteAviso as any);
 
 // 4. TRIAJE OPERATIVO
 router.post('/triaje/:avisoId/contacto', authMiddleware as any, TriajeController.registrarContacto as any);

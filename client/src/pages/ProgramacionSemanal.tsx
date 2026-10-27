@@ -230,18 +230,18 @@ export const ProgramacionSemanal: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       
-      {/* Encabezado Oficial Arauco */}
-      <div className="bg-slate-900 text-white rounded-2xl p-6 shadow-xl border border-slate-800">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-sky-400 text-xs font-bold uppercase tracking-wider">
-              <Building className="w-4 h-4 text-emerald-400" />
-              <span>PC01 Planta Celulosa Puerto Esperanza | Mantenimiento Industrial</span>
+      {/* Encabezado Oficial Arauco Responsivo */}
+      <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-6 shadow-xl border border-slate-800">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-sky-400 text-[11px] sm:text-xs font-bold uppercase tracking-wider flex-wrap">
+              <Building className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="break-words">PC01 Planta Celulosa Puerto Esperanza | Mantenimiento Industrial</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight mt-1">
+            <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight mt-1.5 break-words">
               Programa Diario Semanal de Mantenimiento ({ptoTbjo})
             </h1>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-300 mt-2">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-300 mt-2">
               <span>Puesto Ejecutor: <strong className="text-sky-300">{ptoTbjo}</strong></span>
               <span>•</span>
               <span>Grupo Planificación: <strong className="text-sky-300">{data?.dotacion?.grupoPlanif || 'TA1'}</strong></span>
@@ -251,7 +251,7 @@ export const ProgramacionSemanal: React.FC = () => {
           </div>
 
           {/* Selectores de Semana y Botones de Acción */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
             <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl p-1 text-xs font-bold">
               <button
                 onClick={() => setSemana((s) => Math.max(1, s - 1))}

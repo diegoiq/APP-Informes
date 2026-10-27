@@ -15,18 +15,24 @@ import {
   Search,
   Wrench,
   Layers,
-  Calendar,
   Building,
   CheckCircle2,
-  Tag
+  Tag,
+  HardHat,
+  Camera
 } from 'lucide-react';
 import { PRIORIDADES_REALES } from '@app-informes/shared';
+import ModalRelevamientoPS from '../components/ModalRelevamientoPS';
 
 export const TriajeOperativo: React.FC = () => {
   const [avisos, setAvisos] = useState<any[]>([]);
   const [selectedAviso, setSelectedAviso] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any | null>(null);
+
+  // Modal Relevamiento & Movilización a PS
+  const [selectedAvisoForRelevamiento, setSelectedAvisoForRelevamiento] = useState<any | null>(null);
+  const [showRelevamientoModal, setShowRelevamientoModal] = useState(false);
 
   // Filtros de Triaje
   const [filtroEstado, setFiltroEstado] = useState<'abiertos' | 'todos' | 'cerrados'>('abiertos');
@@ -138,18 +144,20 @@ export const TriajeOperativo: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       
-      {/* Encabezado */}
-      <div>
-        <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase tracking-wider">
-          <Filter className="w-4 h-4" />
-          <span>Cartera Viva & Backlog Operativo de Avisos y OMs</span>
+      {/* Encabezado Responsivo */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase tracking-wider flex-wrap">
+            <Filter className="w-4 h-4 shrink-0" />
+            <span className="break-words">Cartera Viva & Backlog Operativo de Avisos y OMs</span>
+          </div>
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight mt-1.5 break-words">
+            Bolsa de Trabajo SAP PM & Gestión de Prioridades Técnicas
+          </h1>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Filtrado de requerimientos activos, relevamiento de terreno con fotos/HH y preparación de órdenes para el programa semanal.
+          </p>
         </div>
-        <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
-          Bolsa de Trabajo SAP PM & Gestión de Prioridades Técnicas
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          Filtrado de requerimientos activos, revisión de operaciones IW37N con HH y preparación de órdenes para el programa semanal.
-        </p>
       </div>
 
       {/* Grid Principal: Lista a la izquierda, Detalle y Backlog a la derecha */}
@@ -302,12 +310,16 @@ export const TriajeOperativo: React.FC = () => {
                     </p>
                     
                     <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px]">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="font-semibold text-slate-500">{aviso.rubro || 'General'}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">SAP:{aviso.prioridadSap || '5'}</span>
+                        {aviso.hhEstimadasTerreno ? (
+                          <span className="px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 font-extrabold text-[10px]">
+                            {aviso.revisionPs || 'PS'}: {aviso.hhEstimadasTerreno} HH
+                          </span>
+                        ) : null}
                       </div>
                       
-                      {/* Badge de Insistencias y Prioridad Real */}
+                      {/* Badge de Insistencias, Prioridad Real y Acción Rápida de Relevamiento */}
                       <div className="flex items-center gap-1.5">
                         {aviso.contadorInsistencias > 0 && (
                           <span className="px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-extrabold text-[10px] flex items-center gap-1">
@@ -327,6 +339,19 @@ export const TriajeOperativo: React.FC = () => {
                         ) : (
                           <span className="text-amber-600 font-bold text-[10px]">Por triar</span>
                         )}
+
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedAvisoForRelevamiento(aviso);
+                            setShowRelevamientoModal(true);
+                          }}
+                          className="p-1 text-emerald-700 hover:text-white hover:bg-emerald-600 bg-emerald-50 rounded-lg transition border border-emerald-200"
+                          title="Relevamiento de terreno con fotos y movilización a PS"
+                        >
+                          <HardHat className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -351,7 +376,19 @@ export const TriajeOperativo: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => {
+                      setSelectedAvisoForRelevamiento(selectedAviso);
+                      setShowRelevamientoModal(true);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white rounded-lg text-xs font-bold shadow-sm transition cursor-pointer"
+                    title="Cargar notas de campo, fotos de inspección y movilizar a Parada Semanal con cálculo de HH"
+                  >
+                    <HardHat className="w-4 h-4" />
+                    <span>Relevar & Movilizar a PS</span>
+                  </button>
+
                   <button
                     onClick={handleGenerarPlantilla}
                     className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold shadow-sm transition"
@@ -419,6 +456,119 @@ export const TriajeOperativo: React.FC = () => {
                 </div>
               </div>
 
+            </div>
+
+            {/* Tarjeta de Relevamiento de Terreno, Fotos y Movilización a PS */}
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg">
+                    <HardHat className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900">Relevamiento de Campo & Recursos Estimados</h3>
+                    <p className="text-[11px] text-slate-500">Datos protegidos de inspección inicial, fotos y cálculo de Horas Hombre (HH)</p>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedAvisoForRelevamiento(selectedAviso);
+                    setShowRelevamientoModal(true);
+                  }}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-bold transition cursor-pointer"
+                >
+                  <HardHat className="w-3.5 h-3.5" />
+                  <span>{selectedAviso.hhEstimadasTerreno ? 'Modificar Relevamiento' : 'Relevar Terreno'}</span>
+                </button>
+              </div>
+
+              {selectedAviso.hhEstimadasTerreno ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <div className="text-[10px] text-slate-500 font-semibold uppercase">Parada Semanal Asignada</div>
+                      <div className="text-sm font-extrabold text-purple-700 mt-0.5">
+                        {selectedAviso.revisionPs || selectedAviso.revision || 'PS43'}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                      <div className="text-[10px] text-slate-500 font-semibold uppercase">Dotación Estimada</div>
+                      <div className="text-sm font-extrabold text-slate-900 mt-0.5">
+                        {selectedAviso.personasEstimadas || 1} operario(s)
+                      </div>
+                    </div>
+                    <div className="p-3 bg-emerald-50/70 rounded-xl border border-emerald-200">
+                      <div className="text-[10px] text-emerald-700 font-semibold uppercase">Total HH Demandadas</div>
+                      <div className="text-base font-black text-emerald-800 mt-0.5">
+                        {selectedAviso.hhEstimadasTerreno} HH
+                      </div>
+                    </div>
+                  </div>
+
+                  {selectedAviso.comentariosTerreno && (
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                      <div className="font-bold text-slate-700 text-[11px] mb-1">Notas de Inspección en Campo:</div>
+                      <p className="text-slate-600 leading-relaxed whitespace-pre-wrap">{selectedAviso.comentariosTerreno}</p>
+                    </div>
+                  )}
+
+                  {selectedAviso.fotosInspeccion && (
+                    <div>
+                      <div className="font-bold text-slate-700 text-[11px] mb-2 flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5 text-sky-600" />
+                        <span>Galería de Fotos de Terreno</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {(() => {
+                          try {
+                            const parsed = JSON.parse(selectedAviso.fotosInspeccion);
+                            const list = Array.isArray(parsed) ? parsed : [parsed];
+                            return list.map((imgSrc: string, i: number) => (
+                              <img
+                                key={i}
+                                src={imgSrc}
+                                alt={`Foto ${i + 1}`}
+                                className="w-20 h-20 object-cover rounded-lg border border-slate-200 shadow-sm hover:scale-105 transition cursor-pointer"
+                                onClick={() => {
+                                  setSelectedAvisoForRelevamiento(selectedAviso);
+                                  setShowRelevamientoModal(true);
+                                }}
+                              />
+                            ));
+                          } catch {
+                            return (
+                              <img
+                                src={selectedAviso.fotosInspeccion}
+                                alt="Foto"
+                                className="w-20 h-20 object-cover rounded-lg border border-slate-200 shadow-sm"
+                              />
+                            );
+                          }
+                        })()}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 bg-sky-50/60 rounded-xl border border-sky-200 text-center space-y-2">
+                  <p className="text-xs text-sky-800 font-medium">
+                    Este requerimiento aún no tiene relevamiento de terreno ni estimación de recursos calculada.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedAvisoForRelevamiento(selectedAviso);
+                      setShowRelevamientoModal(true);
+                    }}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
+                  >
+                    <HardHat className="w-3.5 h-3.5" />
+                    <span>Iniciar Relevamiento & Movilización a PS</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Tarjeta de Cruce Relacional con Orden de Mantenimiento (OM) */}
@@ -678,6 +828,22 @@ export const TriajeOperativo: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modal Relevamiento & Movilización a PS */}
+      {showRelevamientoModal && selectedAvisoForRelevamiento && (
+        <ModalRelevamientoPS
+          isOpen={showRelevamientoModal}
+          onClose={() => {
+            setShowRelevamientoModal(false);
+            setSelectedAvisoForRelevamiento(null);
+          }}
+          aviso={selectedAvisoForRelevamiento}
+          onSaved={() => {
+            loadAvisos();
+            loadStats();
+          }}
+        />
       )}
 
     </div>

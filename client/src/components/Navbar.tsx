@@ -37,18 +37,18 @@ export const Navbar: React.FC = () => {
         <div className="flex items-center justify-between h-16">
           
           {/* Logo y Marca */}
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-emerald-500 to-sky-600 p-2 rounded-lg shadow-md flex items-center justify-center">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="bg-gradient-to-br from-emerald-500 to-sky-600 p-2 rounded-lg shadow-md flex items-center justify-center shrink-0">
               <HardHat className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold tracking-tight text-lg text-white">APP-Informes</span>
-                <span className="px-2 py-0.5 text-xs font-bold bg-sky-950 text-sky-400 border border-sky-800 rounded">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="font-extrabold tracking-tight text-base sm:text-lg text-white truncate">APP-Informes</span>
+                <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs font-bold bg-sky-950 text-sky-400 border border-sky-800 rounded shrink-0">
                   340CRR
                 </span>
               </div>
-              <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+              <span className="text-[11px] sm:text-xs text-slate-400 font-medium hidden sm:block truncate">
                 Arauco Mantenimiento & Estructuras
               </span>
             </div>
@@ -78,11 +78,11 @@ export const Navbar: React.FC = () => {
           </nav>
 
           {/* Usuario, Cupos y Salida */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Badge de Cupos 5 Usuarios */}
             {stats && (
               <div
-                className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
                   stats.limiteAlcanzado
                     ? 'bg-red-950/80 text-red-300 border-red-800'
                     : 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
@@ -97,8 +97,8 @@ export const Navbar: React.FC = () => {
             {/* Usuario Actual */}
             {user && (
               <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
-                <div className="text-right hidden sm:block">
-                  <div className="text-xs font-bold text-slate-200">{user.nombre}</div>
+                <div className="text-right hidden sm:block max-w-[130px] truncate">
+                  <div className="text-xs font-bold text-slate-200 truncate">{user.nombre}</div>
                   <div className="text-[10px] text-sky-400 uppercase tracking-wider font-semibold">
                     {user.rol}
                   </div>

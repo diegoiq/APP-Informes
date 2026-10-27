@@ -127,8 +127,30 @@ export interface AvisoConsolidado {
   horasRealesIncurridas?: number;
   asignadoAId?: string;
 
+  // Relevamiento y Enriquecimiento de Terreno
+  comentariosTerreno?: string;
+  fotosInspeccion?: string;
+  revisionPs?: string;
+  hhEstimadasTerreno?: number;
+  personasEstimadas?: number;
+  hhRealesAcumuladas?: number;
+
+  // Control SAP y Estado
+  estadoSapOm?: string;
+  fechaModificacionSap?: string;
+  activo?: boolean;
+
   creadoEn: string;
   actualizadoEn: string;
+}
+
+export interface RelevamientoDTO {
+  comentariosTerreno?: string;
+  fotosInspeccion?: string[];
+  horasEstimadas?: number;
+  personasEstimadas?: number;
+  revisionPs?: string; // ej: PS43, PS44, PS50
+  diaSemana?: 'mi' | 'ju' | 'vi' | 'sa' | 'dom' | 'lu' | 'ma';
 }
 
 export interface ExcelIngestionSummary {

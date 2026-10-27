@@ -265,17 +265,17 @@ export const GestionPersonal: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       
-      {/* Encabezado */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase tracking-wider">
-            <Users className="w-4 h-4" />
-            <span>Módulo de Dotación & Personal Operativo</span>
+      {/* Encabezado Responsivo */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase tracking-wider flex-wrap">
+            <Users className="w-4 h-4 shrink-0" />
+            <span className="break-words">Módulo de Dotación & Personal Operativo</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight mt-1.5 break-words">
             Gestión y Carga de Personal (Puesto 340CRR)
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Alta individual, carga masiva desde Excel/CSV, especialidades y control de ausencias para cálculo de capacidad neta semanal.
           </p>
         </div>

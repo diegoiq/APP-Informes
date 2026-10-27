@@ -14,9 +14,11 @@ import {
   Calendar,
   Clock,
   Sparkles,
-  Download
+  Download,
+  HardHat
 } from 'lucide-react';
 import { RUBROS } from '@app-informes/shared';
+import ModalRelevamientoPS from '../components/ModalRelevamientoPS';
 
 export const SapIngesta: React.FC = () => {
   const [avisos, setAvisos] = useState<any[]>([]);
@@ -24,6 +26,10 @@ export const SapIngesta: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [summary, setSummary] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Modal Relevamiento & Movilización a PS
+  const [selectedAvisoRelevamiento, setSelectedAvisoRelevamiento] = useState<any | null>(null);
+  const [showRelevamientoModal, setShowRelevamientoModal] = useState(false);
 
   // Filtros
   const [search, setSearch] = useState('');
@@ -102,22 +108,22 @@ export const SapIngesta: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
-      {/* Título de Sección */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase tracking-wider">
-            <FileSpreadsheet className="w-4 h-4" />
-            <span>Módulo de Ingesta Inteligente SAP</span>
+      {/* Título de Sección Responsivo */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 text-sky-600 font-bold text-xs uppercase tracking-wider flex-wrap">
+            <FileSpreadsheet className="w-4 h-4 shrink-0" />
+            <span className="break-words">Módulo de Ingesta Inteligente SAP PM</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight mt-1">
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-900 tracking-tight mt-1.5 break-words">
             Sincronización de Avisos & Órdenes (OM)
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Consolidación automática de hojas <span className="font-semibold text-slate-700">Avisos</span>, <span className="font-semibold text-slate-700">OM</span> y taxonomía <span className="font-semibold text-slate-700">Analisis</span> con filtrado preferente 340CRR.
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Consolidación automática incremental (Upsert) protegiendo campos de terreno con filtrado preferente 340CRR.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
           <a
             href="/api/sap/sample-file"
             download="Panel-Avisos-OM.xlsx"
@@ -356,12 +362,13 @@ export const SapIngesta: React.FC = () => {
                 <th className="py-3 px-4">Pto. Trabajo & Ubicación</th>
                 <th className="py-3 px-4">Prioridad SAP vs Real</th>
                 <th className="py-3 px-4 text-center">Fase</th>
+                <th className="py-3 px-4 text-center">Relevamiento & PS</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {avisos.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-12 text-center text-slate-400">
+                  <td colSpan={6} className="py-12 text-center text-slate-400">
                     No se encontraron avisos que coincidan con los filtros aplicados.
                   </td>
                 </tr>
@@ -448,6 +455,38 @@ export const SapIngesta: React.FC = () => {
                           {item.faseAvance || '1. Planificación'}
                         </span>
                       </td>
+                      <td className="py-3.5 px-4 text-center">
+                        {item.hhEstimadasTerreno ? (
+                          <div className="flex flex-col items-center gap-1">
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
+                              {item.revisionPs || item.revision || 'PS'} ({item.hhEstimadasTerreno} HH)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedAvisoRelevamiento(item);
+                                setShowRelevamientoModal(true);
+                              }}
+                              className="text-[10px] text-sky-600 hover:text-sky-800 font-bold underline cursor-pointer"
+                            >
+                              Ver / Modificar
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedAvisoRelevamiento(item);
+                              setShowRelevamientoModal(true);
+                            }}
+                            className="px-2.5 py-1.5 bg-gradient-to-r from-emerald-600 to-sky-600 hover:from-emerald-500 hover:to-sky-500 text-white rounded-lg text-[11px] font-bold shadow-sm transition flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
+                            title="Relevamiento de terreno con fotos y movilización a PS"
+                          >
+                            <HardHat className="w-3.5 h-3.5" />
+                            <span>Relevar PS</span>
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })
@@ -456,6 +495,21 @@ export const SapIngesta: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Modal de Relevamiento y Movilización a PS */}
+      {showRelevamientoModal && selectedAvisoRelevamiento && (
+        <ModalRelevamientoPS
+          isOpen={showRelevamientoModal}
+          onClose={() => {
+            setShowRelevamientoModal(false);
+            setSelectedAvisoRelevamiento(null);
+          }}
+          aviso={selectedAvisoRelevamiento}
+          onSaved={() => {
+            fetchAvisos();
+          }}
+        />
+      )}
 
     </div>
   );

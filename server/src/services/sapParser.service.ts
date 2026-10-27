@@ -297,6 +297,7 @@ export class SapParserService {
     });
 
     // 5. Transacción de Upsert asegurando no sobreescribir datos de campo
+    const fechaModificacionActual = new Date();
     for (const item of rowsToProcess) {
       try {
         const existing = await prisma.aviso.findUnique({
@@ -304,19 +305,24 @@ export class SapParserService {
         });
 
         if (existing) {
-          // ACTUALIZAR solo campos de SAP, preservando notas de campo, horas reales, asignado y prioridad acordada
+          // ACTUALIZAR solo campos de SAP (UPSERT incremental)
+          // CAMPOS PROTEGIDOS QUE NUNCA SE SOBREESCRIBEN:
+          // comentariosTerreno, fotosInspeccion, revisionPs, hhEstimadasTerreno, personasEstimadas, hhRealesAcumuladas, notasCampo, horasRealesIncurridas, prioridadRealAcordada, asignadoAId
           await prisma.aviso.update({
             where: { id: existing.id },
             data: {
+              numeroOrden: item.numeroOrden ?? existing.numeroOrden,
+              estadoSapOm: item.estadoSistema ?? existing.estadoSapOm,
+              estadoSistema: item.estadoSistema,
+              fechaModificacionSap: fechaModificacionActual,
               fechaNotificacion: item.fechaNotificacion ?? existing.fechaNotificacion,
               descripcion: item.descripcion,
-              numeroOrden: item.numeroOrden ?? existing.numeroOrden,
-              estadoSistema: item.estadoSistema,
               autor: item.autor ?? existing.autor,
               efecto: item.efecto ?? existing.efecto,
               prioridadSap: item.prioridadSap ?? existing.prioridadSap,
               ptoTbjoResponsable: item.ptoTbjoResponsable ?? existing.ptoTbjoResponsable,
-              revision: item.revision ?? existing.revision,
+              // Preservar la revisión asignada por terreno si existe
+              revision: existing.revisionPs || item.revision || existing.revision,
               ubicacionTecnica: item.ubicacionTecnica ?? existing.ubicacionTecnica,
               denominacionUbicacion: item.denominacionUbicacion ?? existing.denominacionUbicacion,
               claseOrden: item.claseOrden ?? existing.claseOrden,
@@ -331,7 +337,6 @@ export class SapParserService {
               tipoCondicionFinal: item.tipoCondicionFinal ?? existing.tipoCondicionFinal,
               efectoAnalisis: item.efectoAnalisis ?? existing.efectoAnalisis,
               faseAvance: item.faseAvance ?? existing.faseAvance
-              // NOTA CRÍTICA: NO SE ACTUALIZAN horasRealesIncurridas, notasCampo, prioridadRealAcordada, asignadoAId
             }
           });
           summary.actualizados++;
@@ -344,6 +349,8 @@ export class SapParserService {
               descripcion: item.descripcion,
               numeroOrden: item.numeroOrden,
               estadoSistema: item.estadoSistema,
+              estadoSapOm: item.estadoSistema,
+              fechaModificacionSap: fechaModificacionActual,
               autor: item.autor,
               efecto: item.efecto,
               prioridadSap: item.prioridadSap,
@@ -363,7 +370,8 @@ export class SapParserService {
               tipoCondicionFinal: item.tipoCondicionFinal,
               efectoAnalisis: item.efectoAnalisis,
               faseAvance: item.faseAvance || '1. Planificación',
-              contadorInsistencias: 0
+              contadorInsistencias: 0,
+              activo: true
             }
           });
           summary.insertados++;
@@ -419,12 +427,28 @@ export class SapParserService {
           });
         });
 
-        for (let i = 0; i < opsToInsert.length; i += 500) {
-          const chunk = opsToInsert.slice(i, i + 500);
-          await prisma.operacionOM.createMany({
-            data: chunk,
-            skipDuplicates: true
-          });
+        for (const opItem of opsToInsert) {
+          try {
+            await prisma.operacionOM.upsert({
+              where: {
+                numeroOrden_numeroOperacion: {
+                  numeroOrden: opItem.numeroOrden,
+                  numeroOperacion: opItem.numeroOperacion
+                }
+              },
+              update: {
+                textoOperacion: opItem.textoOperacion,
+                ubicacionTecnica: opItem.ubicacionTecnica,
+                ptoTbjo: opItem.ptoTbjo,
+                revision: opItem.revision,
+                horasEstimadas: opItem.horasEstimadas,
+                statusSistema: opItem.statusSistema
+              },
+              create: opItem
+            });
+          } catch {
+            // Ignorar duplicados individuales
+          }
         }
         summary.totalOperacionesIW37N = opsToInsert.length;
       } catch (errIW: any) {

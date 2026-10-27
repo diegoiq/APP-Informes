@@ -99,6 +99,19 @@ class ApiService {
     });
   }
 
+  public guardarRelevamiento(id: string, data: any) {
+    return this.request(`/avisos/${id}/relevamiento`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public deleteAviso(id: string) {
+    return this.request(`/avisos/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
   // Triaje
   public registrarContactoTriaje(avisoId: string, data: any) {
     return this.request(`/triaje/${avisoId}/contacto`, {
