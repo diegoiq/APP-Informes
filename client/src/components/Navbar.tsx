@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 import {
   FileSpreadsheet,
   Filter,
@@ -10,12 +11,37 @@ import {
   LogOut,
   Users,
   ShieldCheck,
-  HardHat
+  HardHat,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
   const { user, stats, logout } = useAuth();
   const navigate = useNavigate();
+
+  const [showClearModal, setShowClearModal] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  const [includeAllModules, setIncludeAllModules] = useState(false);
+
+  const handleNavbarClear = async () => {
+    setClearing(true);
+    try {
+      await api.clearSapData({
+        fullReset: includeAllModules,
+        includeObras: includeAllModules,
+        includeInformes: includeAllModules
+      });
+      setShowClearModal(false);
+      setIncludeAllModules(false);
+      alert('Toda la base cargada ha sido eliminada exitosamente.');
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message || 'Error al eliminar la base cargada.');
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -94,6 +120,19 @@ export const Navbar: React.FC = () => {
               </div>
             )}
 
+            {/* Botón Borrar Toda la Base (Acceso Rápido Administrador) */}
+            {user?.rol === 'admin' && (
+              <button
+                type="button"
+                onClick={() => setShowClearModal(true)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
+                title="Borrar toda la base cargada (Avisos, Órdenes SAP y registros asociados)"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-white" />
+                <span className="hidden sm:inline">Borrar toda la base</span>
+              </button>
+            )}
+
             {/* Usuario Actual */}
             {user && (
               <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
@@ -117,6 +156,98 @@ export const Navbar: React.FC = () => {
 
         </div>
       </div>
+
+      {/* Modal de Advertencia y Confirmación antes de Borrar Toda la Base */}
+      {showClearModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 text-slate-800">
+          <div
+            className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera con advertencia */}
+            <div className="bg-red-50 border-b border-red-100 p-5 flex items-start gap-3.5">
+              <div className="p-2.5 bg-red-600 text-white rounded-xl shadow-md shrink-0">
+                <AlertTriangle className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
+                  ¿Deseas borrar toda la base cargada?
+                </h3>
+                <p className="text-xs text-slate-600 mt-1">
+                  Esta acción archivará de la vista activa todos los avisos, requerimientos y órdenes cargadas en la base de datos.
+                </p>
+              </div>
+            </div>
+
+            {/* Contenido con detalles y advertencias */}
+            <div className="p-5 space-y-4 text-xs text-slate-700">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
+                  Resumen de registros a limpiar (Soft-Delete seguro):
+                </div>
+                <ul className="space-y-1.5 text-slate-600 list-disc list-inside">
+                  <li>Todos los avisos SAP en la cartera de trabajo.</li>
+                  <li>Operaciones de órdenes y horas estimadas (hoja IW37N / OM-HH).</li>
+                  <li>Programaciones semanales y contactos de triaje asociados.</li>
+                </ul>
+              </div>
+
+              {/* Casilla de reinicio extendido */}
+              <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition">
+                <input
+                  type="checkbox"
+                  checked={includeAllModules}
+                  onChange={(e) => setIncludeAllModules(e.target.checked)}
+                  className="mt-0.5 rounded text-red-600 focus:ring-red-500 h-4 w-4"
+                />
+                <div className="text-[11px] text-slate-700">
+                  <span className="font-bold text-slate-900">Reinicio total del sistema (Opcional):</span>
+                  <p className="text-slate-500 mt-0.5">
+                    Incluir también el borrado de Obras, Libros Diarios de Obra e Informes Técnicos CRR.
+                  </p>
+                </div>
+              </label>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] leading-relaxed">
+                ⚠️ <strong>Nota de Seguridad:</strong> Se aplica <em>soft-delete</em> estricto (no se realiza borrado físico destructivo en la BD). La base quedará limpia para una nueva carga sin duplicados.
+              </div>
+            </div>
+
+            {/* Botones de acción */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowClearModal(false);
+                  setIncludeAllModules(false);
+                }}
+                disabled={clearing}
+                className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleNavbarClear}
+                disabled={clearing}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold shadow-md hover:shadow-lg transition flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {clearing ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Borrando toda la base...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Sí, borrar toda la base cargada</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Menú Móvil */}
       <div className="md:hidden flex overflow-x-auto border-t border-slate-800 px-2 py-1 bg-slate-950 scrollbar-none">
