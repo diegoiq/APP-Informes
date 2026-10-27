@@ -480,31 +480,58 @@ export class AvisosController {
   }
 
   /**
-   * Elimina/archiva todos los datos cargados desde Excel (Avisos, Operaciones OM y Contactos de Triaje)
+   * Elimina/archiva toda la base cargada (Avisos, Operaciones OM, Contactos y opcionalmente obras/informes)
    */
   public static async clearExcelData(req: Request, res: Response) {
     try {
+      const { fullReset = false, includeObras = false, includeInformes = false, includePersonal = false } = req.body || {};
+
       // 1. Soft-delete de operaciones OM vinculadas a avisos
       const opsResult = await prisma.operacionOM.deleteMany({});
       
       // 2. Soft-delete de contactos de triaje
       const triajeResult = await prisma.triajeContacto.deleteMany({});
 
-      // 3. Soft-delete de todos los avisos
+      // 3. Soft-delete de programaciones semanales vinculadas a avisos
+      const progResult = await prisma.programacionSemanal.deleteMany({});
+
+      // 4. Soft-delete de todos los avisos
       const avisosResult = await prisma.aviso.deleteMany({});
 
+      const detalles: any = {
+        avisosBorrados: avisosResult.count,
+        operacionesBorradas: opsResult.count,
+        contactosBorrados: triajeResult.count,
+        programacionesBorradas: progResult.count
+      };
+
+      if (fullReset || includeObras) {
+        await prisma.fotoBitacora.deleteMany({});
+        await prisma.libroDiario.deleteMany({});
+        const obr = await prisma.obra.deleteMany({});
+        detalles.obrasBorradas = obr.count;
+      }
+
+      if (fullReset || includeInformes) {
+        await prisma.fotoInformeCRR.deleteMany({});
+        const inf = await prisma.informeCRR.deleteMany({});
+        detalles.informesBorrados = inf.count;
+      }
+
+      if (fullReset || includePersonal) {
+        await prisma.ausenciaPersonal.deleteMany({});
+        const per = await prisma.personal.deleteMany({});
+        detalles.personalBorrado = per.count;
+      }
+
       return res.json({
-        message: 'Todos los datos cargados desde Excel han sido eliminados correctamente.',
-        detalles: {
-          avisosBorrados: avisosResult.count,
-          operacionesBorradas: opsResult.count,
-          contactosBorrados: triajeResult.count
-        }
+        message: 'Toda la base cargada ha sido eliminada correctamente.',
+        detalles
       });
     } catch (error: any) {
-      console.error('Error al borrar datos cargados desde Excel:', error);
+      console.error('Error al borrar toda la base cargada:', error);
       return res.status(500).json({
-        message: 'Error al eliminar datos de Excel',
+        message: 'Error al eliminar la base cargada',
         error: error.message || String(error)
       });
     }

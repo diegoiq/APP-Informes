@@ -32,10 +32,11 @@ export const SapIngesta: React.FC = () => {
   const [selectedAvisoRelevamiento, setSelectedAvisoRelevamiento] = useState<any | null>(null);
   const [showRelevamientoModal, setShowRelevamientoModal] = useState(false);
 
-  // Modal Advertencia y Borrado de Datos Excel
+  // Modal Advertencia y Borrado de Toda la Base Cargada
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [clearSuccess, setClearSuccess] = useState<string | null>(null);
+  const [includeAllModules, setIncludeAllModules] = useState(false);
 
   // Filtros
   const [search, setSearch] = useState('');
@@ -115,14 +116,19 @@ export const SapIngesta: React.FC = () => {
     setClearing(true);
     setError(null);
     try {
-      const res = await api.clearSapData();
-      setClearSuccess(res.message || 'Datos cargados desde Excel eliminados exitosamente.');
+      const res = await api.clearSapData({
+        fullReset: includeAllModules,
+        includeObras: includeAllModules,
+        includeInformes: includeAllModules
+      });
+      setClearSuccess(res.message || 'Toda la base cargada ha sido eliminada exitosamente.');
       setShowClearModal(false);
+      setIncludeAllModules(false);
       await fetchAvisos();
       await loadRevisiones();
       setTimeout(() => setClearSuccess(null), 6000);
     } catch (err: any) {
-      alert(err.message || 'Error al eliminar los datos cargados desde Excel.');
+      alert(err.message || 'Error al eliminar la base cargada.');
     } finally {
       setClearing(false);
     }
@@ -165,12 +171,12 @@ export const SapIngesta: React.FC = () => {
           <button
             type="button"
             onClick={() => setShowClearModal(true)}
-            disabled={avisos.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-300 rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-            title="Borrar todos los avisos y operaciones cargadas desde el archivo Excel"
+            disabled={clearing}
+            className="flex items-center gap-1.5 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm hover:shadow cursor-pointer disabled:opacity-50"
+            title="Borrar toda la base cargada (Avisos, Órdenes SAP y registros asociados)"
           >
-            <Trash2 className="w-4 h-4 text-red-600" />
-            <span>Borrar Datos de Excel</span>
+            <Trash2 className="w-4 h-4 text-white" />
+            <span>Borrar toda la base cargada</span>
           </button>
         </div>
       </div>
@@ -384,14 +390,26 @@ export const SapIngesta: React.FC = () => {
 
       {/* Tabla de Avisos y OMs Sincronizados */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="px-6 py-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-bold text-slate-900 text-sm">Registros Sincronizados en Base de Datos</h3>
             <span className="px-2 py-0.5 text-xs font-bold bg-sky-100 text-sky-800 rounded-full">
               {avisos.length} avisos {estadoFilter === 'abiertos' ? 'abiertos' : estadoFilter === 'cerrados' ? 'cerrados' : 'en total'}
             </span>
           </div>
-          <span className="text-xs text-slate-400">Cruce relacional Avisos ↔ OM ↔ Análisis</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowClearModal(true)}
+              disabled={clearing}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-semibold transition cursor-pointer"
+              title="Borrar toda la base cargada"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-red-600" />
+              <span>Borrar toda la base cargada</span>
+            </button>
+            <span className="text-xs text-slate-400 hidden lg:inline">Cruce relacional Avisos ↔ OM ↔ Análisis</span>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -552,7 +570,7 @@ export const SapIngesta: React.FC = () => {
         />
       )}
 
-      {/* Modal de Advertencia y Confirmación antes de Borrar Datos de Excel */}
+      {/* Modal de Advertencia y Confirmación antes de Borrar Toda la Base Cargada */}
       {showClearModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div
@@ -566,10 +584,10 @@ export const SapIngesta: React.FC = () => {
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 tracking-tight">
-                  ¿Deseas borrar todo lo cargado desde el Excel?
+                  ¿Deseas borrar toda la base cargada?
                 </h3>
                 <p className="text-xs text-slate-600 mt-1">
-                  Esta acción eliminará de la vista activa todos los requerimientos y órdenes provenientes de la ingesta de SAP.
+                  Esta acción archivará de la vista activa todos los avisos, requerimientos y órdenes cargadas en la base de datos.
                 </p>
               </div>
             </div>
@@ -578,23 +596,39 @@ export const SapIngesta: React.FC = () => {
             <div className="p-5 space-y-4 text-xs text-slate-700">
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
                 <div className="font-bold text-slate-800 text-[11px] uppercase tracking-wider">
-                  Resumen de elementos a archivar (Soft-Delete):
+                  Resumen de registros a limpiar (Soft-Delete seguro):
                 </div>
                 <ul className="space-y-1.5 text-slate-600 list-disc list-inside">
                   <li>
-                    <strong>{avisos.length} avisos SAP</strong> en la cartera de trabajo.
+                    <strong>{avisos.length} avisos SAP</strong> actualmente en la cartera activa.
                   </li>
                   <li>
-                    Operaciones y horas de órdenes vinculadas (hoja <strong>IW37N / OM-HH</strong>).
+                    Operaciones de órdenes y horas estimadas de SAP (hoja <strong>IW37N / OM-HH</strong>).
                   </li>
                   <li>
-                    Registros de contactos de triaje asociados a estos avisos.
+                    Programaciones semanales y contactos de triaje asociados a estos avisos.
                   </li>
                 </ul>
               </div>
 
+              {/* Casilla de reinicio extendido */}
+              <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 cursor-pointer transition">
+                <input
+                  type="checkbox"
+                  checked={includeAllModules}
+                  onChange={(e) => setIncludeAllModules(e.target.checked)}
+                  className="mt-0.5 rounded text-red-600 focus:ring-red-500 h-4 w-4"
+                />
+                <div className="text-[11px] text-slate-700">
+                  <span className="font-bold text-slate-900">Reinicio total del sistema (Opcional):</span>
+                  <p className="text-slate-500 mt-0.5">
+                    Incluir también el borrado de Obras, Libros Diarios de Obra e Informes Técnicos CRR cargados en el sistema.
+                  </p>
+                </div>
+              </label>
+
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-[11px] leading-relaxed">
-                ⚠️ <strong>Nota de Seguridad:</strong> Se aplica <em>soft-delete</em> estricto (no se realiza borrado físico destructivo en la BD). La tabla quedará limpia para que puedas cargar una nueva versión de la planilla Excel sin duplicados ni interferencias.
+                ⚠️ <strong>Nota de Seguridad:</strong> Se aplica <em>soft-delete</em> estricto (no se realiza borrado físico destructivo en la BD). La base quedará limpia para que puedas cargar una nueva versión de la planilla Excel sin duplicados ni interferencias.
               </div>
             </div>
 
@@ -602,7 +636,10 @@ export const SapIngesta: React.FC = () => {
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-end gap-3">
               <button
                 type="button"
-                onClick={() => setShowClearModal(false)}
+                onClick={() => {
+                  setShowClearModal(false);
+                  setIncludeAllModules(false);
+                }}
                 disabled={clearing}
                 className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-100 rounded-xl text-xs font-bold transition cursor-pointer"
               >
@@ -617,12 +654,12 @@ export const SapIngesta: React.FC = () => {
                 {clearing ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Borrando datos...</span>
+                    <span>Borrando toda la base...</span>
                   </>
                 ) : (
                   <>
                     <Trash2 className="w-4 h-4" />
-                    <span>Sí, borrar datos de Excel</span>
+                    <span>Sí, borrar toda la base cargada</span>
                   </>
                 )}
               </button>

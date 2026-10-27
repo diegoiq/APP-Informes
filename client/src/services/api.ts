@@ -75,9 +75,10 @@ class ApiService {
     });
   }
 
-  public clearSapData() {
+  public clearSapData(payload?: { fullReset?: boolean; includeObras?: boolean; includeInformes?: boolean; includePersonal?: boolean }) {
     return this.request('/sap/clear', {
-      method: 'POST'
+      method: 'POST',
+      body: payload ? JSON.stringify(payload) : undefined
     });
   }
 
