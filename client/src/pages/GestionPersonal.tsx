@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { useAuth } from '../context/AuthContext';
 import {
   Users,
   UserPlus,
@@ -22,6 +23,7 @@ import {
 import { RUBROS, RubroType } from '@app-informes/shared';
 
 export const GestionPersonal: React.FC = () => {
+  const { user } = useAuth();
   const [personalList, setPersonalList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -52,10 +54,10 @@ export const GestionPersonal: React.FC = () => {
 
   // Modal Limpiar Datos Demo
   const [showCleanModal, setShowCleanModal] = useState(false);
-  const [cleanAvisos, setCleanAvisos] = useState(true);
-  const [cleanObras, setCleanObras] = useState(true);
-  const [cleanPersonal, setCleanPersonal] = useState(true);
-  const [cleanInformes, setCleanInformes] = useState(true);
+  const [cleanAvisos, setCleanAvisos] = useState(false);
+  const [cleanObras, setCleanObras] = useState(false);
+  const [cleanPersonal, setCleanPersonal] = useState(false);
+  const [cleanInformes, setCleanInformes] = useState(false);
   const [cleanDemoUsers, setCleanDemoUsers] = useState(false);
   const [cleanLoading, setCleanLoading] = useState(false);
 
@@ -229,7 +231,11 @@ export const GestionPersonal: React.FC = () => {
 
   // Limpiar Datos Demo
   const handleExecuteClean = async () => {
-    if (!confirm('⚠️ ¿Confirmas eliminar los datos seleccionados? Esta acción es permanente para preparar la plataforma con datos reales.')) return;
+    if (!cleanAvisos && !cleanObras && !cleanPersonal && !cleanInformes && !cleanDemoUsers) {
+      alert('Debes seleccionar al menos una casilla para limpiar.');
+      return;
+    }
+    if (!confirm('⚠️ ¿Confirmas eliminar los datos seleccionados? Esta acción es irreversible y eliminará los registros de la base de datos.')) return;
     setCleanLoading(true);
     try {
       const res = await api.cleanDemoData({
@@ -275,14 +281,16 @@ export const GestionPersonal: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2.5">
-          <button
-            onClick={() => setShowCleanModal(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition shadow-sm"
-            title="Limpiar datos de prueba para ingresar datos reales"
-          >
-            <Trash2 className="w-4 h-4 text-red-600" />
-            <span>Limpiar Datos Demo</span>
-          </button>
+          {user?.rol === 'admin' && (
+            <button
+              onClick={() => setShowCleanModal(true)}
+              className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-bold transition shadow-sm"
+              title="Limpiar datos de prueba para ingresar datos reales"
+            >
+              <Trash2 className="w-4 h-4 text-red-600" />
+              <span>Limpiar Datos Demo</span>
+            </button>
+          )}
 
           <button
             onClick={() => {

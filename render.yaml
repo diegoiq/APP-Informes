@@ -21,8 +21,8 @@ services:
     branch: main
     # Fase de compilación del monorepo (asegura instalación de definiciones de tipos)
     buildCommand: npm install --include=dev && npm run build
-    # En capa gratuita: Sincroniza DB, ejecuta limpieza de datos demo y arranca Express
-    startCommand: npx prisma db push --schema=server/prisma/schema.prisma && node server/dist/scripts/cleanAllDemoData.js && node server/dist/index.js
+    # Sincroniza esquema de PostgreSQL sin borrar datos existentes y arranca Express
+    startCommand: npx prisma db push --schema=server/prisma/schema.prisma && node server/dist/index.js
     envVars:
       - key: NODE_ENV
         value: production

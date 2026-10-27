@@ -1,6 +1,10 @@
 import prisma from '../database/db';
 
 async function cleanAllDemoData() {
+  if (process.env.FORCE_CLEAN_DEMO !== 'true') {
+    console.log('⚠️ [CLEANUP] Limpieza omitida: No se definió FORCE_CLEAN_DEMO=true. Los datos reales están protegidos contra borrado involuntario.');
+    return;
+  }
   console.log('🧹 [CLEANUP] Limpiando datos demo en base de datos...');
 
   try {

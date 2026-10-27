@@ -8,13 +8,21 @@ export class AdminController {
    */
   public static async cleanDemoData(req: AuthenticatedRequest, res: Response) {
     try {
+      if (req.user?.rol !== 'admin') {
+        return res.status(403).json({ message: 'Acceso denegado: solo administradores pueden realizar esta acción.' });
+      }
+
       const {
-        cleanAvisos = true,
-        cleanObras = true,
-        cleanPersonal = true,
-        cleanInformes = true,
-        cleanDemoUsers = true
+        cleanAvisos = false,
+        cleanObras = false,
+        cleanPersonal = false,
+        cleanInformes = false,
+        cleanDemoUsers = false
       } = req.body;
+
+      if (!cleanAvisos && !cleanObras && !cleanPersonal && !cleanInformes && !cleanDemoUsers) {
+        return res.status(400).json({ message: 'No se seleccionó ningún módulo para limpiar.' });
+      }
 
       const resultados: Record<string, number> = {};
 
