@@ -27,17 +27,31 @@ export const SapIngesta: React.FC = () => {
 
   // Filtros
   const [search, setSearch] = useState('');
-  const [rubroFilter, setRubroFilter] = useState('');
+  const [revisionFilter, setRevisionFilter] = useState('');
+  const [availableRevisiones, setAvailableRevisiones] = useState<string[]>([]);
   const [estadoFilter, setEstadoFilter] = useState<'abiertos' | 'todos' | 'cerrados'>('abiertos');
   const [omFilter, setOmFilter] = useState<'todos' | 'con_om' | 'sin_om'>('todos');
   const [solo340, setSolo340] = useState(true);
+
+  const loadRevisiones = async () => {
+    try {
+      const data = await api.getRevisiones();
+      setAvailableRevisiones(data || []);
+    } catch (err) {
+      console.warn('Error al cargar revisiones:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadRevisiones();
+  }, []);
 
   const fetchAvisos = async () => {
     setLoading(true);
     try {
       const params: Record<string, string> = {};
       if (search) params.search = search;
-      if (rubroFilter) params.rubro = rubroFilter;
+      if (revisionFilter) params.revision = revisionFilter;
       if (estadoFilter !== 'todos') params.estado = estadoFilter;
       if (omFilter === 'con_om') params.conOM = 'true';
       if (omFilter === 'sin_om') params.conOM = 'false';
@@ -54,7 +68,7 @@ export const SapIngesta: React.FC = () => {
 
   useEffect(() => {
     fetchAvisos();
-  }, [search, rubroFilter, estadoFilter, omFilter, solo340]);
+  }, [search, revisionFilter, estadoFilter, omFilter, solo340]);
 
   const handleFileUpload = async (file: File) => {
     if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
@@ -69,6 +83,7 @@ export const SapIngesta: React.FC = () => {
     try {
       const res = await api.uploadSapExcel(file);
       setSummary(res.summary);
+      await loadRevisiones();
       await fetchAvisos();
     } catch (err: any) {
       setError(err.message || 'Error durante la ingesta del archivo Excel');
@@ -258,16 +273,54 @@ export const SapIngesta: React.FC = () => {
             <option value="sin_om">⚠️ Sin Orden Asignada</option>
           </select>
 
-          {/* Selector Rubro */}
+          {/* Selector Revisión: PS vs Obra vs Específica */}
           <select
-            value={rubroFilter}
-            onChange={(e) => setRubroFilter(e.target.value)}
-            className="py-2 px-3 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+            value={revisionFilter}
+            onChange={(e) => setRevisionFilter(e.target.value)}
+            className="py-2 px-3 border border-slate-300 rounded-lg text-xs font-semibold text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 shadow-sm"
           >
-            <option value="">Todos los Rubros</option>
-            {RUBROS.map((r) => (
-              <option key={r} value={r}>{r}</option>
-            ))}
+            <option value="">Todas las Revisiones</option>
+            <option value="PS">📅 Solo Programas Semanales (PS)</option>
+            <option value="OBRA">🏗️ Solo Obras (OBRA)</option>
+            <option value="sin_revision">⚪ Sin Revisión Asignada</option>
+
+            {availableRevisiones.some((r) => r.toUpperCase().includes('PS')) && (
+              <optgroup label="── Programas Semanales (PS) ──">
+                {availableRevisiones
+                  .filter((r) => r.toUpperCase().includes('PS'))
+                  .map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+              </optgroup>
+            )}
+
+            {availableRevisiones.some((r) => r.toUpperCase().includes('OBRA')) && (
+              <optgroup label="── Obras (OBRA) ──">
+                {availableRevisiones
+                  .filter((r) => r.toUpperCase().includes('OBRA'))
+                  .map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+              </optgroup>
+            )}
+
+            {availableRevisiones.some(
+              (r) => !r.toUpperCase().includes('PS') && !r.toUpperCase().includes('OBRA')
+            ) && (
+              <optgroup label="── Otras Revisiones ──">
+                {availableRevisiones
+                  .filter((r) => !r.toUpperCase().includes('PS') && !r.toUpperCase().includes('OBRA'))
+                  .map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+              </optgroup>
+            )}
           </select>
 
           <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer select-none ml-1">
@@ -301,8 +354,6 @@ export const SapIngesta: React.FC = () => {
                 <th className="py-3 px-4">N° Aviso & Cruce OT</th>
                 <th className="py-3 px-4">Descripción Requerimiento</th>
                 <th className="py-3 px-4">Pto. Trabajo & Ubicación</th>
-                <th className="py-3 px-4">Rubro / Especialidad</th>
-                <th className="py-3 px-4">Riesgo / Condición</th>
                 <th className="py-3 px-4">Prioridad SAP vs Real</th>
                 <th className="py-3 px-4 text-center">Fase</th>
               </tr>
@@ -310,7 +361,7 @@ export const SapIngesta: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {avisos.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={5} className="py-12 text-center text-slate-400">
                     No se encontraron avisos que coincidan con los filtros aplicados.
                   </td>
                 </tr>
@@ -325,9 +376,21 @@ export const SapIngesta: React.FC = () => {
                           <div className="text-[11px] text-slate-800 font-bold flex items-center gap-1 mt-0.5">
                             <span>OT: {item.numeroOrden}</span>
                             {item.revision && (
-                              <span className="px-1.5 py-0.2 rounded text-[10px] font-extrabold bg-purple-100 text-purple-800 border border-purple-200">
+                              <button
+                                type="button"
+                                onClick={() => setRevisionFilter(item.revision)}
+                                title={`Filtrar por revisión ${item.revision}`}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-extrabold border transition hover:opacity-80 cursor-pointer ${
+                                  item.revision.toUpperCase().includes('OBRA')
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                                    : item.revision.toUpperCase().includes('PS')
+                                    ? 'bg-purple-100 text-purple-800 border-purple-200'
+                                    : 'bg-slate-100 text-slate-700 border-slate-300'
+                                }`}
+                              >
+                                {item.revision.toUpperCase().includes('OBRA') ? '🏗️ ' : item.revision.toUpperCase().includes('PS') ? '📅 ' : ''}
                                 {item.revision}
-                              </span>
+                              </button>
                             )}
                           </div>
                         ) : (
@@ -360,19 +423,6 @@ export const SapIngesta: React.FC = () => {
                         </div>
                         <div className="text-[10px] text-slate-400 truncate max-w-[200px]">
                           {item.denominacionUbicacion || ''}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
-                          {item.rubro || 'Mantenimiento General'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <div className="font-semibold text-slate-800 text-[11px]">
-                          {item.tipoRiesgo || 'Condición Subestándar'}
-                        </div>
-                        <div className="text-[10px] text-slate-500 mt-0.5">
-                          {item.tipoCondicionFinal || 'Tratamiento Anticorrosivo'}
                         </div>
                       </td>
                       <td className="py-3.5 px-4">

@@ -26,6 +26,7 @@ router.get('/sap/sample-file', AvisosController.downloadSample);
 
 // 3. AVISOS Y GESTIÓN DE CAMPO
 router.get('/avisos/stats', AvisosController.getStats);
+router.get('/avisos/revisiones', AvisosController.getRevisiones);
 router.get('/avisos', AvisosController.list);
 router.get('/avisos/:id', AvisosController.getById);
 router.patch('/avisos/:id', authMiddleware as any, AvisosController.updateFieldData as any);

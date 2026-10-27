@@ -82,6 +82,32 @@ export class AvisosController {
   }
 
   /**
+   * Obtiene lista de revisiones únicas existentes en la base de datos (PS, Obras, etc.)
+   */
+  public static async getRevisiones(req: Request, res: Response) {
+    try {
+      const records = await prisma.aviso.findMany({
+        where: {
+          revision: { not: null }
+        },
+        select: {
+          revision: true
+        },
+        distinct: ['revision']
+      });
+
+      const revisiones = records
+        .map(r => r.revision?.trim())
+        .filter((r): r is string => Boolean(r && r.length > 0))
+        .sort((a, b) => a.localeCompare(b));
+
+      return res.json(revisiones);
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Error al obtener revisiones', error: error.message });
+    }
+  }
+
+  /**
    * Lista todos los avisos con filtros operacionales
    */
   public static async list(req: Request, res: Response) {
@@ -142,9 +168,31 @@ export class AvisosController {
       }
 
       if (revision) {
-        andConditions.push({
-          revision: { contains: String(revision).trim() }
-        });
+        const rev = String(revision).trim();
+        if (rev === 'PS') {
+          // Filtra cualquier revisión de Programa Semanal (ej: PS432026, PS502026, etc.)
+          andConditions.push({
+            revision: { contains: 'PS' }
+          });
+        } else if (rev === 'OBRA' || rev === 'OBRAS') {
+          // Filtra cualquier revisión de Obras (ej: OBRAS26, OBRA2026, OBRAS25, etc.)
+          andConditions.push({
+            revision: { contains: 'OBRA' }
+          });
+        } else if (rev === 'sin_revision') {
+          // Avisos u órdenes sin revisión asignada
+          andConditions.push({
+            OR: [
+              { revision: null },
+              { revision: '' }
+            ]
+          });
+        } else {
+          // Filtro por revisión específica seleccionada
+          andConditions.push({
+            revision: { contains: rev }
+          });
+        }
       }
 
       if (solo340CRR === 'true') {
