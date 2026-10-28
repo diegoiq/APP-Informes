@@ -309,6 +309,19 @@ class ApiService {
       body: JSON.stringify(data)
     });
   }
+
+  public deleteInforme(id: string) {
+    return this.request(`/informes/${id}`, {
+      method: 'DELETE'
+    });
+  }
+
+  public deleteInformesBatch(ids: string[]) {
+    return this.request('/informes/delete-batch', {
+      method: 'POST',
+      body: JSON.stringify({ ids })
+    });
+  }
 }
 
 export const api = new ApiService();

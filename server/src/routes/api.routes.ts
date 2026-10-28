@@ -74,6 +74,8 @@ router.get('/informes', InformesController.list);
 router.get('/informes/:id', InformesController.getById);
 router.get('/informes/:id/export-html', InformesController.exportHTML);
 router.post('/informes', authMiddleware as any, InformesController.create as any);
+router.post('/informes/delete-batch', authMiddleware as any, InformesController.deleteBatch as any);
+router.delete('/informes/:id', authMiddleware as any, InformesController.deleteById as any);
 
 // 8. ADMINISTRACIÓN, LIMPIEZA Y ESTADO DE RENDER / SISTEMA
 router.get('/system/status', AdminController.getSystemStatus);

@@ -282,4 +282,45 @@ export class InformesController {
       return res.status(500).send(`Error al renderizar HTML de informe: ${error.message}`);
     }
   }
+
+  /**
+   * Eliminar un informe técnico individual por ID (y sus fotos asociadas)
+   */
+  public static async deleteById(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      await prisma.fotoInformeCRR.deleteMany({ where: { informeId: id } });
+      await prisma.informeCRR.delete({ where: { id } });
+      return res.json({ message: 'Informe eliminado exitosamente' });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Error al eliminar el informe', error: error.message });
+    }
+  }
+
+  /**
+   * Eliminar múltiples informes seleccionados (borrado selectivo por lote)
+   */
+  public static async deleteBatch(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: 'Seleccione al menos un informe para eliminar.' });
+      }
+
+      await prisma.fotoInformeCRR.deleteMany({
+        where: { informeId: { in: ids } }
+      });
+
+      const deleted = await prisma.informeCRR.deleteMany({
+        where: { id: { in: ids } }
+      });
+
+      return res.json({
+        message: `${deleted.count} informe(s) eliminado(s) correctamente.`,
+        deletedCount: deleted.count
+      });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Error al eliminar informes seleccionados', error: error.message });
+    }
+  }
 }
