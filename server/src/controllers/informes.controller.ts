@@ -4,9 +4,74 @@ import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 import fs from 'fs';
 import path from 'path';
 
+function deduplicateFotosInput(fotos: any[]): Array<{
+  etapa: string;
+  url: string;
+  diagnosticoTecnico: string;
+  pieDeFoto: string;
+}> {
+  if (!Array.isArray(fotos)) return [];
+  const seenUrls = new Set<string>();
+  const unique: Array<{
+    etapa: string;
+    url: string;
+    diagnosticoTecnico: string;
+    pieDeFoto: string;
+  }> = [];
+
+  for (const f of fotos) {
+    const url = typeof f === 'string' ? f : f?.url;
+    if (!url || typeof url !== 'string') continue;
+    const key = url.trim();
+    if (seenUrls.has(key)) continue;
+    seenUrls.add(key);
+
+    unique.push({
+      etapa: 'Comentario',
+      url: key,
+      diagnosticoTecnico: (f?.diagnosticoTecnico || f?.comentario || 'Comentario de registro').trim(),
+      pieDeFoto: (f?.pieDeFoto || '').trim()
+    });
+  }
+  return unique;
+}
+
+async function cleanDuplicateFotosInDB(informe: any) {
+  if (!informe || !Array.isArray(informe.fotos) || informe.fotos.length <= 1) {
+    return informe;
+  }
+
+  const seenUrls = new Set<string>();
+  const uniqueFotos: any[] = [];
+  const duplicateIds: string[] = [];
+
+  for (const f of informe.fotos) {
+    const key = (f.url || '').trim();
+    if (!key || seenUrls.has(key)) {
+      if (f.id) duplicateIds.push(f.id);
+    } else {
+      seenUrls.add(key);
+      uniqueFotos.push(f);
+    }
+  }
+
+  if (duplicateIds.length > 0) {
+    try {
+      await prisma.fotoInformeCRR.deleteMany({
+        where: { id: { in: duplicateIds } }
+      });
+    } catch {
+      // ignore cleanup error
+    }
+    informe.fotos = uniqueFotos;
+  }
+
+  return informe;
+}
+
 export class InformesController {
   /**
-   * Listar todos los informes técnicos CRR
+   * Listar todos los informes técnicos CRR (limpiando fotos duplicadas si existieran)
    */
   public static async list(req: Request, res: Response) {
     try {
@@ -19,6 +84,11 @@ export class InformesController {
           fotos: true
         }
       });
+
+      for (const inf of informes) {
+        await cleanDuplicateFotosInDB(inf);
+      }
+
       return res.json(informes);
     } catch (error: any) {
       return res.status(500).json({ message: 'Error al listar informes CRR', error: error.message });
@@ -47,6 +117,8 @@ export class InformesController {
         return res.status(404).json({ message: 'Informe CRR no encontrado' });
       }
 
+      await cleanDuplicateFotosInDB(informe);
+
       return res.json(informe);
     } catch (error: any) {
       return res.status(500).json({ message: 'Error al obtener informe', error: error.message });
@@ -62,7 +134,6 @@ export class InformesController {
         return res.status(401).json({ message: 'Usuario no autenticado' });
       }
 
-      // Generar consecutivo de código CRR: INF_ CRR – 00XXX - 2026
       const count = await prisma.informeCRR.count();
       const correlativo = String(count + 1).padStart(5, '0');
       const anio = new Date().getFullYear();
@@ -92,8 +163,10 @@ export class InformesController {
         esquemaPintura,
         ordenAseoDossier,
         firmaElaboroUrl,
-        fotos = [] // Array de { etapa: 'Antes'|'Durante'|'Después', url, diagnosticoTecnico, pieDeFoto }
+        fotos = []
       } = req.body;
+
+      const fotosUnicas = deduplicateFotosInput(fotos);
 
       const nuevoInforme = await prisma.informeCRR.create({
         data: {
@@ -122,14 +195,7 @@ export class InformesController {
           ordenAseoDossier,
           firmaElaboroUrl,
           fotos: {
-            create: Array.isArray(fotos)
-              ? fotos.map((f: any) => ({
-                  etapa: f.etapa || 'Antes',
-                  url: f.url,
-                  diagnosticoTecnico: f.diagnosticoTecnico || 'Condición observada',
-                  pieDeFoto: f.pieDeFoto || ''
-                }))
-              : []
+            create: fotosUnicas
           }
         },
         include: {
@@ -143,6 +209,91 @@ export class InformesController {
       return res.status(201).json(nuevoInforme);
     } catch (error: any) {
       return res.status(500).json({ message: 'Error al generar informe CRR', error: error.message });
+    }
+  }
+
+  /**
+   * Actualizar / Editar un informe técnico existente sin duplicar fotos
+   */
+  public static async update(req: AuthenticatedRequest, res: Response) {
+    try {
+      const { id } = req.params;
+      const existente = await prisma.informeCRR.findUnique({ where: { id } });
+
+      if (!existente) {
+        return res.status(404).json({ message: 'Informe CRR no encontrado para editar' });
+      }
+
+      const {
+        codigoInforme,
+        tipoInforme,
+        titulo,
+        empresaContratista,
+        observaciones,
+        distribucion,
+        copiaAsignada,
+        avisoNumero,
+        ordenNumero,
+        ubicacionTecnica,
+        objetivo,
+        lugarObraTexto,
+        lugarObraFotoUrl,
+        anexosTexto,
+        anexosFotos,
+        firmaElaboroUrl,
+        fotos
+      } = req.body;
+
+      const fotosUnicas = Array.isArray(fotos) ? deduplicateFotosInput(fotos) : null;
+
+      const actualizado = await prisma.$transaction(async (tx) => {
+        if (fotosUnicas !== null) {
+          await tx.fotoInformeCRR.deleteMany({
+            where: { informeId: id }
+          });
+        }
+
+        return await tx.informeCRR.update({
+          where: { id },
+          data: {
+            ...(codigoInforme !== undefined && { codigoInforme: String(codigoInforme).trim() }),
+            ...(tipoInforme !== undefined && { tipoInforme: String(tipoInforme) }),
+            ...(titulo !== undefined && { titulo: String(titulo) }),
+            ...(empresaContratista !== undefined && { empresaContratista: String(empresaContratista) }),
+            ...(observaciones !== undefined && { observaciones: String(observaciones) }),
+            ...(distribucion !== undefined && { distribucion: String(distribucion) }),
+            ...(copiaAsignada !== undefined && { copiaAsignada: String(copiaAsignada) }),
+            ...(avisoNumero !== undefined && { avisoNumero: avisoNumero ? String(avisoNumero) : null }),
+            ...(ordenNumero !== undefined && { ordenNumero: ordenNumero ? String(ordenNumero) : null }),
+            ...(ubicacionTecnica !== undefined && { ubicacionTecnica: ubicacionTecnica ? String(ubicacionTecnica) : null }),
+            ...(objetivo !== undefined && { objetivo: String(objetivo) }),
+            ...(lugarObraTexto !== undefined && { lugarObraTexto: String(lugarObraTexto) }),
+            ...(lugarObraFotoUrl !== undefined && { lugarObraFotoUrl: lugarObraFotoUrl ? String(lugarObraFotoUrl) : null }),
+            ...(anexosTexto !== undefined && { anexosTexto: String(anexosTexto) }),
+            ...(anexosFotos !== undefined && {
+              anexosFotos: typeof anexosFotos === 'object' ? JSON.stringify(anexosFotos) : anexosFotos
+            }),
+            ...(firmaElaboroUrl !== undefined && {
+              firmaElaboroUrl: firmaElaboroUrl ? String(firmaElaboroUrl) : existente.firmaElaboroUrl
+            }),
+            ...(fotosUnicas !== null && {
+              fotos: {
+                create: fotosUnicas
+              }
+            })
+          },
+          include: {
+            fotos: true,
+            responsable: {
+              select: { id: true, nombre: true, email: true }
+            }
+          }
+        });
+      });
+
+      return res.json(actualizado);
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Error al actualizar el informe CRR', error: error.message });
     }
   }
 
@@ -163,6 +314,8 @@ export class InformesController {
       if (!informe) {
         return res.status(404).send('Informe no encontrado');
       }
+
+      await cleanDuplicateFotosInDB(informe);
 
       const templatePath = path.resolve(__dirname, '../../../templates/informe-crr-modelo.html');
       let html = fs.readFileSync(templatePath, 'utf8');
@@ -209,18 +362,16 @@ export class InformesController {
         html = html.replace(/{{#if lugarObraFotoUrl}}[\s\S]*?{{else}}/, '').replace('{{/if}}', '');
       }
 
-      // Sección 3: Registro fotográfico
+      // Sección 3: Fotos y Comentarios (sin etiquetas de Antes/Durante/Después y sin duplicados)
       let fotosHtml = '';
       if (informe.fotos && informe.fotos.length > 0) {
         for (const foto of informe.fotos) {
-          const etapaClass = (foto.etapa || 'general').toLowerCase().replace(/[^a-z]/g, '');
           fotosHtml += `
             <div class="photo-card">
-              <img src="${foto.url}" alt="Evidencia Fotográfica" class="photo-card-img" />
+              <img src="${foto.url}" alt="Foto del Informe" class="photo-card-img" />
               <div class="photo-card-body">
-                <span class="badge-etapa badge-${etapaClass}">${foto.etapa || 'Evidencia'}</span>
-                <div class="photo-diagnostico">${foto.diagnosticoTecnico || 'Registro de campo'}</div>
-                <div class="photo-pie">${foto.pieDeFoto || ''}</div>
+                <div class="photo-diagnostico">${foto.diagnosticoTecnico || 'Comentario de trabajo'}</div>
+                ${foto.pieDeFoto ? `<div class="photo-pie">${foto.pieDeFoto}</div>` : ''}
               </div>
             </div>
           `;
@@ -228,7 +379,7 @@ export class InformesController {
       } else {
         fotosHtml = `
           <div style="grid-column: 1 / -1; padding: 18px; text-align: center; color: #94a3b8; font-size: 9pt; border: 1px dashed #cbd5e1; border-radius: 6px;">
-            No se han registrado evidencias fotográficas en este informe.
+            No se han registrado fotos y comentarios en este informe.
           </div>
         `;
       }
@@ -249,7 +400,6 @@ export class InformesController {
             anexosFotosHtml += '</div>';
           }
         } catch (e) {
-          // Si es una sola URL directa
           if (informe.anexosFotos.startsWith('data:') || informe.anexosFotos.startsWith('http')) {
             anexosFotosHtml = `<div class="anexos-grid"><img src="${informe.anexosFotos}" alt="Anexo Plano" class="anexo-item-img" /></div>`;
           }

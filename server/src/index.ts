@@ -84,26 +84,46 @@ app.listen(PORT, async () => {
       console.log(`✅ Usuario ${email} creado con rol admin y clave Arauco2026`);
     }
 
-    // Sincronizar automáticamente el archivo PS442026 340CRR.xlsm de la raíz solo si aún no está cargado o tenía el desfase previo
-    const ps44Path = path.resolve(__dirname, '../../PS442026 340CRR.xlsm');
-    if (fs.existsSync(ps44Path)) {
-      const existingDot44 = await prisma.dotacionSemanalArauco.findUnique({
-        where: { semana_anio_ptoTbjo: { semana: 44, anio: 2026, ptoTbjo: '340CRR' } }
-      });
-      const ops44Count = await prisma.operacionOM.count({
-        where: { semanaProg: 44, anioProg: 2026 }
-      });
+    // Sincronizar automáticamente los archivos PS432026 y PS442026 de la raíz solo si aún no están cargados en BD
+    const psFiles = [
+      { file: 'PS432026 340CRR.xlsm', semana: 43, anio: 2026 },
+      { file: 'PS442026 340CRR.xlsm', semana: 44, anio: 2026 }
+    ];
 
-      // Solo importar desde disco si la semana 44 está vacía o si quedó con el desfase antiguo (opDomingo === 9 o opMartes === 0)
-      if (!existingDot44 || ops44Count === 0 || existingDot44.opDomingo === 9 || existingDot44.opMartes === 0) {
-        const buffer = fs.readFileSync(ps44Path);
-        const summary = await AraucoProgramParserService.processProgramFile(buffer, 'PS442026 340CRR.xlsm');
-        await ProgramacionAraucoController.syncInformeSemanal(summary.semana, summary.anio, summary.ptoTbjo);
-        console.log(
-          `✅ PS442026 340CRR inicializado en BD (${summary.totalOperaciones} operaciones | ${summary.hhDisponibles} HH disp | ${summary.hhProgramadas} HH prog)`
-        );
-      } else {
-        console.log(`✅ PS442026 340CRR ya persistido en BD (${ops44Count} operaciones activas).`);
+    for (const item of psFiles) {
+      const psPath = path.resolve(__dirname, `../../${item.file}`);
+      if (fs.existsSync(psPath)) {
+        const existingDot = await prisma.dotacionSemanalArauco.findUnique({
+          where: { semana_anio_ptoTbjo: { semana: item.semana, anio: item.anio, ptoTbjo: '340CRR' } }
+        });
+        const opsCount = await prisma.operacionOM.count({
+          where: { semanaProg: item.semana, anioProg: item.anio }
+        });
+
+        const needsImport =
+          !existingDot ||
+          opsCount === 0 ||
+          (item.semana === 44 && (existingDot.opDomingo === 9 || existingDot.opMartes === 0));
+
+        if (needsImport) {
+          const buffer = fs.readFileSync(psPath);
+          const summary = await AraucoProgramParserService.processProgramFile(
+            buffer,
+            item.file,
+            item.semana,
+            item.anio
+          );
+          await ProgramacionAraucoController.syncInformeSemanal(
+            summary.semana,
+            summary.anio,
+            summary.ptoTbjo
+          );
+          console.log(
+            `✅ ${item.file} inicializado en BD (${summary.totalOperaciones} operaciones | ${summary.hhDisponibles} HH disp | ${summary.hhProgramadas} HH prog)`
+          );
+        } else {
+          console.log(`✅ ${item.file} ya persistido en BD (${opsCount} operaciones activas).`);
+        }
       }
     }
   } catch (err: any) {

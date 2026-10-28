@@ -46,7 +46,9 @@ export class AraucoProgramParserService {
    */
   public static async processProgramFile(
     fileBuffer: Buffer,
-    filename: string = 'PS-Arauco.xlsm'
+    filename: string = 'PS-Arauco.xlsm',
+    targetSemana?: number,
+    targetAnio?: number
   ): Promise<AraucoProgramSummary> {
     const workbook = new ExcelJS.Workbook();
     // @ts-ignore exceljs accepts buffer
@@ -84,17 +86,22 @@ export class AraucoProgramParserService {
       parseCellString(wsExport?.getCell('E2')) ||
       'TA1';
 
-    // Fechas (Desde / Hasta)
+    // Fechas (Desde / Hasta) normalizadas a las 12:00 UTC para evitar desfase por huso horario GMT-3
     const parseExcelDate = (cell: ExcelJS.Cell | undefined): Date | null => {
       const raw = unwrapCellValue(cell);
       if (!raw) return null;
-      if (raw instanceof Date && !isNaN(raw.getTime())) return raw;
-      if (typeof raw === 'number') {
+      let d: Date | null = null;
+      if (raw instanceof Date && !isNaN(raw.getTime())) {
+        d = raw;
+      } else if (typeof raw === 'number' && raw > 1000) {
         const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-        return new Date(excelEpoch.getTime() + raw * 86400000);
+        d = new Date(excelEpoch.getTime() + raw * 86400000);
+      } else if (typeof raw === 'string') {
+        const parsed = new Date(raw);
+        if (!isNaN(parsed.getTime())) d = parsed;
       }
-      const d = new Date(String(raw));
-      return isNaN(d.getTime()) ? null : d;
+      if (!d || isNaN(d.getTime())) return null;
+      return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 12, 0, 0));
     };
 
     let fechaInicio =
@@ -107,15 +114,19 @@ export class AraucoProgramParserService {
       parseExcelDate(wsExport?.getCell('C4')) ||
       parseExcelDate(wsPegado?.getCell('C4'));
 
-    // Deducir semana y año desde el nombre de archivo (ej: PS442026...) o de las fechas
-    let semana = 44;
-    let anio = 2026;
+    // Deducir semana y año desde el nombre de archivo (ej: PS432026, PS 43-2026, PS42...), de la semana seleccionada en UI o de las fechas
+    let semana = targetSemana && targetSemana >= 1 && targetSemana <= 53 ? targetSemana : 44;
+    let anio = targetAnio && targetAnio >= 2020 && targetAnio <= 2035 ? targetAnio : 2026;
 
-    const matchName = filename.match(/PS\s*(\d{1,2})\s*(\d{4})/i);
-    if (matchName) {
-      semana = parseInt(matchName[1], 10);
-      anio = parseInt(matchName[2], 10);
-    } else if (fechaInicio && !isNaN(fechaInicio.getTime())) {
+    const matchNameFull = filename.match(/PS[\s_-]*(\d{1,2})[\s_-]*(\d{4})/i);
+    const matchNameShort = !matchNameFull ? filename.match(/PS[\s_-]*(\d{1,2})(?:\b|[\s_-])/i) : null;
+
+    if (matchNameFull) {
+      semana = parseInt(matchNameFull[1], 10);
+      anio = parseInt(matchNameFull[2], 10);
+    } else if (matchNameShort) {
+      semana = parseInt(matchNameShort[1], 10);
+    } else if (!targetSemana && fechaInicio && !isNaN(fechaInicio.getTime())) {
       const d = new Date(Date.UTC(fechaInicio.getUTCFullYear(), fechaInicio.getUTCMonth(), fechaInicio.getUTCDate()));
       const dayNum = d.getUTCDay() || 7;
       d.setUTCDate(d.getUTCDate() + 4 - dayNum);
@@ -125,7 +136,9 @@ export class AraucoProgramParserService {
     }
 
     if (!fechaInicio) {
-      fechaInicio = new Date(Date.UTC(anio, 9, 28)); // Default Mié 28-Oct-2026
+      const baseDate = new Date(Date.UTC(anio, 0, 1, 12, 0, 0));
+      const dayOffset = (semana - 1) * 7;
+      fechaInicio = new Date(baseDate.getTime() + (dayOffset + 2) * 86400000);
     }
     if (!fechaFin) {
       fechaFin = new Date(fechaInicio.getTime() + 6 * 86400000); // 7 días (Mi a Ma)
@@ -283,7 +296,11 @@ export class AraucoProgramParserService {
     const operacionesExtraidas = Array.from(operacionesMap.values());
 
     // 4.1 Desasignar operaciones previas de esta misma semana que ya no estén en el archivo Excel subido
-    const keysNuevas = new Set(operacionesExtraidas.map(o => `${o.numeroOrden}__${o.numeroOperacion}`));
+    const keysNuevas = new Set<string>();
+    for (const o of operacionesExtraidas) {
+      keysNuevas.add(`${o.numeroOrden}__${o.numeroOperacion}`);
+      keysNuevas.add(`${o.numeroOrden}__${o.numeroOperacion}-S${semana}`);
+    }
     const opsPreviasSemana = await prisma.operacionOM.findMany({
       where: {
         semanaProg: semana,
@@ -315,18 +332,35 @@ export class AraucoProgramParserService {
       });
     }
 
-    // 5. Guardar operaciones en la base de datos (preservando comentariosEjecucion y fotosEjecucion existentes)
+    // 5. Guardar operaciones en la base de datos (preservando comentariosEjecucion, fotosEjecucion y evitando quitar operaciones de otras semanas)
     for (const op of operacionesExtraidas) {
       const avisoRelacionado = await prisma.aviso.findFirst({
         where: { numeroOrden: op.numeroOrden },
         select: { id: true }
       });
 
-      await prisma.operacionOM.upsert({
+      const existingOp = await prisma.operacionOM.findUnique({
         where: {
           numeroOrden_numeroOperacion: {
             numeroOrden: op.numeroOrden,
             numeroOperacion: op.numeroOperacion
+          }
+        },
+        select: { id: true, semanaProg: true, anioProg: true }
+      });
+
+      const numOpKey =
+        existingOp &&
+        existingOp.semanaProg !== null &&
+        (existingOp.semanaProg !== semana || existingOp.anioProg !== anio)
+          ? `${op.numeroOperacion}-S${semana}`
+          : op.numeroOperacion;
+
+      await prisma.operacionOM.upsert({
+        where: {
+          numeroOrden_numeroOperacion: {
+            numeroOrden: op.numeroOrden,
+            numeroOperacion: numOpKey
           }
         },
         update: {
@@ -348,7 +382,7 @@ export class AraucoProgramParserService {
         },
         create: {
           numeroOrden: op.numeroOrden,
-          numeroOperacion: op.numeroOperacion,
+          numeroOperacion: numOpKey,
           textoOperacion: op.textoOperacion,
           ubicacionTecnica: op.ubicacionTecnica,
           ptoTbjo: op.ptoTbjo,

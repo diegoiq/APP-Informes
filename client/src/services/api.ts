@@ -216,9 +216,11 @@ class ApiService {
     return this.request(`/programacion/arauco?semana=${semana}&anio=${anio}&ptoTbjo=${ptoTbjo}`);
   }
 
-  public uploadPSFile(file: File) {
+  public uploadPSFile(file: File, semana?: number, anio?: number) {
     const formData = new FormData();
     formData.append('file', file);
+    if (semana !== undefined) formData.append('semana', String(semana));
+    if (anio !== undefined) formData.append('anio', String(anio));
     return this.request('/programacion/arauco/upload', {
       method: 'POST',
       body: formData
@@ -306,6 +308,13 @@ class ApiService {
   public createInforme(data: any) {
     return this.request('/informes', {
       method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public updateInforme(id: string, data: any) {
+    return this.request(`/informes/${id}`, {
+      method: 'PUT',
       body: JSON.stringify(data)
     });
   }

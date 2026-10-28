@@ -97,17 +97,17 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-40 shadow-lg">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
           
           {/* Logo y Marca */}
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 py-1">
-            <div className="bg-gradient-to-br from-emerald-500 to-sky-600 p-2 rounded-lg shadow-md flex items-center justify-center shrink-0">
-              <HardHat className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0 py-1">
+            <div className="bg-gradient-to-br from-emerald-500 to-sky-600 p-1.5 sm:p-2 rounded-lg shadow-md flex items-center justify-center shrink-0">
+              <HardHat className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
             </div>
             <div className="min-w-0 flex flex-col justify-center">
               <div className="flex items-center gap-1.5 sm:gap-2 leading-none">
-                <span className="font-extrabold tracking-tight text-base sm:text-lg text-white leading-tight">APP-Informes</span>
+                <span className="font-extrabold tracking-tight text-sm sm:text-lg text-white leading-tight truncate">APP-Informes</span>
                 <span className="px-1.5 py-0.5 text-[10px] sm:text-xs font-bold bg-sky-950 text-sky-400 border border-sky-800 rounded shrink-0 leading-none">
                   340CRR
                 </span>
@@ -118,8 +118,8 @@ export const Navbar: React.FC = () => {
             </div>
           </div>
 
-          {/* Menú de Navegación */}
-          <nav className="hidden md:flex items-center space-x-1">
+          {/* Menú de Navegación Escritorio Amplio */}
+          <nav className="hidden xl:flex items-center space-x-1 shrink-0">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -127,14 +127,14 @@ export const Navbar: React.FC = () => {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+                    `flex items-center gap-1.5 px-2.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
                       isActive
                         ? 'bg-slate-800 text-sky-400 border-b-2 border-sky-400'
                         : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                     }`
                   }
                 >
-                  <Icon className="w-4 h-4" />
+                  <Icon className="w-4 h-4 shrink-0" />
                   <span>{item.label}</span>
                 </NavLink>
               );
@@ -539,8 +539,8 @@ export const Navbar: React.FC = () => {
         </div>
       )}
 
-      {/* Menú Móvil */}
-      <div className="md:hidden flex overflow-x-auto border-t border-slate-800 px-2 py-1 bg-slate-950 scrollbar-none">
+      {/* Menú Móvil y Tablet (< 1280px) */}
+      <div className="xl:hidden flex overflow-x-auto border-t border-slate-800 px-2 py-1.5 bg-slate-950 scrollbar-none gap-1">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
@@ -548,12 +548,12 @@ export const Navbar: React.FC = () => {
               key={item.to}
               to={item.to}
               className={({ isActive }) =>
-                `flex items-center gap-1.5 px-3 py-1.5 rounded text-xs whitespace-nowrap font-medium ${
-                  isActive ? 'bg-slate-800 text-sky-400' : 'text-slate-400 hover:text-white'
+                `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs whitespace-nowrap font-bold transition ${
+                  isActive ? 'bg-slate-800 text-sky-400 border border-sky-500/40' : 'text-slate-400 hover:text-white'
                 }`
               }
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className="w-3.5 h-3.5 shrink-0" />
               <span>{item.label}</span>
             </NavLink>
           );

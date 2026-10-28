@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
@@ -38,7 +38,7 @@ const DIAS = [
 
 interface FotoEvidenciaItem {
   url: string;
-  etapa: 'Antes' | 'Durante' | 'Después';
+  etapa?: string;
   comentario: string;
   fecha?: string;
 }
@@ -58,8 +58,10 @@ export const ProgramacionSemanal: React.FC = () => {
   const [sysStatus, setSysStatus] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [syncingInforme, setSyncingInforme] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Modal para agregar operación desde Backlog IW37N
   const [showAddModal, setShowAddModal] = useState(false);
@@ -72,7 +74,6 @@ export const ProgramacionSemanal: React.FC = () => {
   const [estadoEjecucion, setEstadoEjecucion] = useState('En Ejecución');
   const [comentariosEjecucion, setComentariosEjecucion] = useState('');
   const [fotosEjecucion, setFotosEjecucion] = useState<FotoEvidenciaItem[]>([]);
-  const [etapaNuevaFoto, setEtapaNuevaFoto] = useState<'Antes' | 'Durante' | 'Después'>('Durante');
   const [savingEvidencia, setSavingEvidencia] = useState(false);
 
   // Edición rápida de dotación
@@ -122,14 +123,21 @@ export const ProgramacionSemanal: React.FC = () => {
     loadProgramacion();
   }, [semana, anio, ptoTbjo]);
 
-  // Subida de archivo PS...xlsm
+  // Subida de archivo PS...xlsm (semana actual o semanas anteriores)
   const handleFileUpload = async (file: File) => {
+    if (uploading) return;
+    const ext = file.name.toLowerCase();
+    if (!ext.endsWith('.xlsm') && !ext.endsWith('.xlsx') && !ext.endsWith('.xls')) {
+      alert('Por favor arrastra o selecciona un archivo Excel de Programa Semanal (.xlsm o .xlsx)');
+      return;
+    }
+
     setUploading(true);
     setUploadSuccess(null);
     try {
-      const res = await api.uploadPSFile(file);
+      const res = await api.uploadPSFile(file, semana, anio);
       setUploadSuccess(
-        `Archivo ${file.name} importado (${res.summary.totalOperaciones} operaciones | ${res.summary.hhDisponibles} HH disp. | ${res.summary.hhProgramadas} HH prog. | Densidad ${res.summary.densidad}%). Informe semanal PS${res.summary.semana}${res.summary.anio} ${res.summary.ptoTbjo} activo.`
+        `Archivo ${file.name} importado en PS${res.summary.semana}${res.summary.anio} (${res.summary.totalOperaciones} operaciones | ${res.summary.hhDisponibles} HH disp. | ${res.summary.hhProgramadas} HH prog. | Densidad ${res.summary.densidad}%). Informe semanal PS${res.summary.semana}${res.summary.anio} ${res.summary.ptoTbjo} activo.`
       );
       if (res.summary.semana !== semana || res.summary.anio !== anio) {
         setSemana(res.summary.semana);
@@ -137,16 +145,21 @@ export const ProgramacionSemanal: React.FC = () => {
       } else {
         await loadProgramacion();
       }
-      setTimeout(() => setUploadSuccess(null), 7000);
+      setTimeout(() => setUploadSuccess(null), 8000);
     } catch (err: any) {
       alert(err.message || 'Error al importar archivo de programación');
     } finally {
       setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFileUpload(e.dataTransfer.files[0]);
     }
@@ -202,22 +215,30 @@ export const ProgramacionSemanal: React.FC = () => {
     }
   };
 
-  // Parsear fotos de una operación
+  // Parsear fotos de una operación (sin duplicados por URL)
   const parseOpFotos = (op: any): FotoEvidenciaItem[] => {
     if (!op?.fotosEjecucion) return [];
     try {
       const parsed = JSON.parse(op.fotosEjecucion);
       if (Array.isArray(parsed)) {
-        return parsed.map((item) =>
-          typeof item === 'string'
-            ? { url: item, etapa: 'Durante', comentario: '' }
-            : {
-                url: item.url,
-                etapa: item.etapa || 'Durante',
-                comentario: item.comentario || '',
-                fecha: item.fecha
-              }
-        );
+        const seen = new Set<string>();
+        const result: FotoEvidenciaItem[] = [];
+        for (const item of parsed) {
+          const url = typeof item === 'string' ? item : item?.url;
+          if (!url || seen.has(url)) continue;
+          seen.add(url);
+          result.push(
+            typeof item === 'string'
+              ? { url: item, etapa: 'Comentario', comentario: '' }
+              : {
+                  url: item.url,
+                  etapa: 'Comentario',
+                  comentario: item.comentario || '',
+                  fecha: item.fecha
+                }
+          );
+        }
+        return result;
       }
     } catch {
       // ignore
@@ -231,10 +252,9 @@ export const ProgramacionSemanal: React.FC = () => {
     setEstadoEjecucion(op.estadoEjecucion || 'En Ejecución');
     setComentariosEjecucion(op.comentariosEjecucion || '');
     setFotosEjecucion(parseOpFotos(op));
-    setEtapaNuevaFoto('Durante');
   };
 
-  // Subir fotos a Base64 dentro del modal de la línea del PS
+  // Subir fotos a Base64 dentro del modal de la línea del PS (evitando duplicados)
   const handleLinePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -245,15 +265,18 @@ export const ProgramacionSemanal: React.FC = () => {
       reader.onload = (event) => {
         const base64 = event.target?.result as string;
         if (base64) {
-          setFotosEjecucion((prev) => [
-            ...prev,
-            {
-              url: base64,
-              etapa: etapaNuevaFoto,
-              comentario: '',
-              fecha: new Date().toISOString()
-            }
-          ]);
+          setFotosEjecucion((prev) => {
+            if (prev.some((f) => f.url === base64)) return prev;
+            return [
+              ...prev,
+              {
+                url: base64,
+                etapa: 'Comentario',
+                comentario: '',
+                fecha: new Date().toISOString()
+              }
+            ];
+          });
         }
       };
       reader.readAsDataURL(file);
@@ -352,7 +375,7 @@ export const ProgramacionSemanal: React.FC = () => {
     if (!data?.dotacion?.fechaInicio) return '';
     const fIni = new Date(data.dotacion.fechaInicio);
     const fFin = new Date(data.dotacion.fechaFin);
-    return `${fIni.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })} al ${fFin.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' })}`;
+    return `${fIni.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })} al ${fFin.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'UTC' })}`;
   };
 
   const codigoPSActual = `PS${semana}${anio} ${ptoTbjo}`;
@@ -368,7 +391,7 @@ export const ProgramacionSemanal: React.FC = () => {
   );
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-6">
       
       {/* Encabezado Oficial Arauco Responsivo */}
       <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-6 shadow-xl border border-slate-800">
@@ -378,14 +401,14 @@ export const ProgramacionSemanal: React.FC = () => {
               <Building className="w-4 h-4 text-emerald-400 shrink-0" />
               <span className="break-words">PC01 Planta Celulosa Puerto Esperanza | Mantenimiento Industrial</span>
             </div>
-            <h1 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight mt-1.5 break-words">
+            <h1 className="text-lg sm:text-2xl lg:text-3xl font-extrabold text-white tracking-tight mt-1.5 break-words">
               Programa Diario Semanal — <span className="text-sky-400">{codigoPSActual}</span>
             </h1>
             <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs text-slate-300 mt-2">
               <span>Puesto Ejecutor: <strong className="text-sky-300">{ptoTbjo}</strong></span>
-              <span>•</span>
+              <span className="hidden sm:inline">•</span>
               <span>Grupo Planificación: <strong className="text-sky-300">{data?.dotacion?.grupoPlanif || 'TA1'}</strong></span>
-              <span>•</span>
+              <span className="hidden sm:inline">•</span>
               <span>Período Oficial: <strong className="text-emerald-300">{getPeriodoFechas() || 'Ciclo Miércoles a Martes'}</strong></span>
             </div>
           </div>
@@ -394,16 +417,32 @@ export const ProgramacionSemanal: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
             <div className="flex items-center bg-slate-800 border border-slate-700 rounded-xl p-1 text-xs font-bold">
               <button
+                type="button"
                 onClick={() => setSemana((s) => Math.max(1, s - 1))}
                 className="p-1.5 hover:bg-slate-700 rounded-lg transition cursor-pointer"
                 title="Semana anterior"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="px-3 text-sky-300">
-                PS{semana}{anio} (Sem. {semana})
-              </span>
+              <select
+                value={semana}
+                onChange={(e) => setSemana(Number(e.target.value))}
+                className="bg-slate-800 text-sky-300 font-extrabold px-2 py-1 rounded-lg focus:outline-none cursor-pointer text-xs"
+                title="Seleccionar semana del Programa Semanal"
+              >
+                {Array.from({ length: 52 }, (_, i) => i + 1).map((semNum) => {
+                  const isLoaded = (data?.semanasDisponibles || []).some(
+                    (s: any) => s.semana === semNum && s.anio === anio
+                  );
+                  return (
+                    <option key={semNum} value={semNum}>
+                      PS{semNum}{anio} (Sem. {semNum}){isLoaded ? ' ✓' : ''}
+                    </option>
+                  );
+                })}
+              </select>
               <button
+                type="button"
                 onClick={() => setSemana((s) => Math.min(52, s + 1))}
                 className="p-1.5 hover:bg-slate-700 rounded-lg transition cursor-pointer"
                 title="Semana siguiente"
@@ -413,6 +452,7 @@ export const ProgramacionSemanal: React.FC = () => {
             </div>
 
             <button
+              type="button"
               onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
             >
@@ -421,6 +461,7 @@ export const ProgramacionSemanal: React.FC = () => {
             </button>
 
             <button
+              type="button"
               onClick={loadProgramacion}
               className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition cursor-pointer"
               title="Actualizar datos"
@@ -429,6 +470,33 @@ export const ProgramacionSemanal: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Acceso rápido a semanas PS cargadas */}
+        {data?.semanasDisponibles && data.semanasDisponibles.length > 0 && (
+          <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-2 flex-wrap text-[11px]">
+            <span className="text-slate-400 font-semibold">Semanas PS en servidor:</span>
+            {data.semanasDisponibles.map((s: any) => {
+              const active = s.semana === semana && s.anio === anio;
+              return (
+                <button
+                  key={`${s.semana}-${s.anio}`}
+                  type="button"
+                  onClick={() => {
+                    setSemana(s.semana);
+                    setAnio(s.anio);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                    active
+                      ? 'bg-sky-500 text-white shadow-sm'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
+                  }`}
+                >
+                  PS{s.semana}{s.anio}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Notificación de carga o guardado exitoso */}
         {uploadSuccess && (
@@ -566,41 +634,70 @@ export const ProgramacionSemanal: React.FC = () => {
         </div>
       </div>
 
-      {/* Zona Drag & Drop para importar archivo oficial PS...xlsm */}
+      {/* Zona Drag & Drop para importar archivo oficial PS...xlsm (semana actual o semanas pasadas) */}
       <div
-        onDragOver={(e) => e.preventDefault()}
+        onClick={() => !uploading && fileInputRef.current?.click()}
+        onDragEnter={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragging(true);
+        }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!isDragging) setIsDragging(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragging(false);
+        }}
         onDrop={handleDrop}
-        className="bg-white border-2 border-dashed border-sky-300 hover:border-sky-500 rounded-2xl p-5 text-center transition shadow-sm relative group cursor-pointer"
+        className={`bg-white border-2 border-dashed rounded-2xl p-4 sm:p-5 transition shadow-sm relative group cursor-pointer ${
+          isDragging
+            ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-300'
+            : 'border-sky-300 hover:border-sky-500'
+        }`}
       >
         <input
+          ref={fileInputRef}
           type="file"
-          accept=".xlsm, .xlsx"
-          onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
-          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+          accept=".xlsm,.xlsx,.xls,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) handleFileUpload(file);
+          }}
+          className="hidden"
         />
-        <div className="flex items-center justify-center gap-3 pointer-events-none">
-          <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-md group-hover:scale-105 transition">
-            <UploadCloud className="w-5 h-5" />
-          </div>
-          <div className="text-left">
-            <h4 className="font-bold text-xs text-slate-800">
-              ¿Tienes el archivo del programa <span className="text-sky-700">PS{semana}{anio} 340CRR.xlsm</span>?
-            </h4>
-            <p className="text-[11px] text-slate-500">
-              Arrastra y suéltalo aquí para importar todas las operaciones, dotación (H2:N2) y horas asignadas preservando las fotos y comentarios.
-            </p>
-          </div>
-          {uploading && (
-            <div className="flex items-center gap-1.5 text-xs font-bold text-sky-700 bg-sky-100 px-3 py-1 rounded-full animate-pulse ml-auto">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              <span>Importando planilla Arauco...</span>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-none">
+          <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
+            <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-md group-hover:scale-105 transition shrink-0">
+              <UploadCloud className="w-5 h-5" />
             </div>
+            <div>
+              <h4 className="font-bold text-xs sm:text-sm text-slate-800">
+                Arrastra aquí el archivo <span className="text-sky-700">PS{semana}{anio} 340CRR.xlsm</span> o cualquier PS de semanas anteriores
+              </h4>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                También puedes tocar para seleccionarlo desde tu celular o PC. Se importan todas las operaciones, dotación (H2:N2) y horas asignadas sin perder fotos ni comentarios de ninguna semana.
+              </p>
+            </div>
+          </div>
+          {uploading ? (
+            <div className="flex items-center gap-1.5 text-xs font-bold text-sky-700 bg-sky-100 px-3 py-1.5 rounded-full animate-pulse shrink-0">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              <span>Importando planilla PS...</span>
+            </div>
+          ) : (
+            <span className="px-3 py-1.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold shrink-0">
+              Seleccionar archivo .xlsm / .xlsx
+            </span>
           )}
         </div>
       </div>
 
       {/* Panel de Control de Dotación y Capacidad Neta Semanal */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+      <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-3 gap-3">
           <div className="flex items-center gap-2 flex-wrap">
             <CalendarDays className="w-4 h-4 text-sky-600 shrink-0" />
@@ -768,7 +865,7 @@ export const ProgramacionSemanal: React.FC = () => {
         </div>
       </div>
 
-      {/* Grilla Oficial de Operaciones Programadas */}
+      {/* Grilla Oficial de Operaciones Programadas (Tarjetas en Móvil + Tabla en Escritorio) */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden space-y-0">
         <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50">
           <div>
@@ -776,19 +873,132 @@ export const ProgramacionSemanal: React.FC = () => {
               Operaciones Programadas en Semana {semana} — {codigoPSActual}
             </h3>
             <p className="text-[11px] text-slate-500">
-              Haz clic en <strong className="text-sky-700">"Fotos / Comentario"</strong> en cualquier línea para cargar evidencias que se unen al Informe Semanal <strong>{codigoPSActual}</strong>.
+              Haz clic en <strong className="text-sky-700">"Fotos y Comentarios"</strong> en cualquier línea para cargar evidencias que se unen al Informe Semanal <strong>{codigoPSActual}</strong>.
             </p>
           </div>
           <button
+            type="button"
             onClick={openBacklogModal}
-            className="flex items-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition shadow-sm self-start sm:self-auto cursor-pointer"
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition shadow-sm w-full sm:w-auto cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>+ Añadir Operación desde IW37N</span>
           </button>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* VISTA MÓVIL (TARJETAS INTERACTIVAS < 768px) */}
+        <div className="md:hidden divide-y divide-slate-200">
+          {(!data?.operaciones || data.operaciones.length === 0) ? (
+            <div className="p-8 text-center text-xs text-slate-400">
+              No hay operaciones programadas para esta semana. Arrastra o selecciona el archivo <strong className="text-slate-600">PS{semana}{anio} 340CRR.xlsm</strong> arriba.
+            </div>
+          ) : (
+            data.operaciones.map((op: any) => {
+              const opFotos = parseOpFotos(op);
+              const tieneEvidencia =
+                opFotos.length > 0 ||
+                (op.comentariosEjecucion && op.comentariosEjecucion.trim() !== '');
+
+              return (
+                <div key={op.id} className="p-3.5 space-y-2.5 bg-white">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono font-extrabold text-xs text-sky-800 bg-sky-100 px-2 py-0.5 rounded">
+                        OT {op.numeroOrden}
+                      </span>
+                      <span className="font-mono font-bold text-[11px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                        Op. {op.numeroOperacion}
+                      </span>
+                      <span className="text-[10px] font-mono text-slate-500 truncate max-w-[140px]">
+                        {op.ubicacionTecnica || '340CRR'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="px-2 py-0.5 rounded bg-slate-900 text-white font-extrabold text-[11px]">
+                        {op.hhTotalProgramado} HH
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveOp(op.id)}
+                        className="p-1 text-slate-400 hover:text-red-600 rounded"
+                        title="Quitar operación"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="text-xs font-bold text-slate-900">
+                    {op.textoOperacion}
+                  </div>
+
+                  {op.comentariosEjecucion && (
+                    <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1.5 font-medium">
+                      💬 {op.comentariosEjecucion}
+                    </div>
+                  )}
+
+                  {/* Mini-grilla de 7 días en móvil */}
+                  <div className="grid grid-cols-7 gap-1 pt-1">
+                    {DIAS.map((d) => {
+                      const propKey = d.key === 'mi' ? 'hhMiercoles' :
+                                      d.key === 'ju' ? 'hhJueves' :
+                                      d.key === 'vi' ? 'hhViernes' :
+                                      d.key === 'sa' ? 'hhSabado' :
+                                      d.key === 'dom' ? 'hhDomingo' :
+                                      d.key === 'lu' ? 'hhLunes' : 'hhMartes';
+                      const val = op[propKey] || 0;
+                      return (
+                        <div key={d.key} className="text-center">
+                          <div className="text-[9px] font-bold text-slate-400 uppercase">{d.short}</div>
+                          <input
+                            type="number"
+                            step="0.5"
+                            min="0"
+                            max="30"
+                            defaultValue={val > 0 ? val : ''}
+                            placeholder="-"
+                            onBlur={(e) => {
+                              const newH = parseFloat(e.target.value) || 0;
+                              if (newH !== val) handleSaveOperacionHours(op, d.key, newH);
+                            }}
+                            className={`w-full py-1 text-center rounded border text-[11px] font-bold ${
+                              val > 0
+                                ? 'bg-sky-50 border-sky-400 text-sky-900 font-extrabold'
+                                : 'bg-slate-50 border-slate-200 text-slate-400'
+                            }`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => openEvidenciaModal(op)}
+                    className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition shadow-sm cursor-pointer ${
+                      tieneEvidencia
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+                        : 'bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200'
+                    }`}
+                  >
+                    <Camera className="w-4 h-4 shrink-0" />
+                    {tieneEvidencia ? (
+                      <span>
+                        Editar Fotos y Comentarios ({opFotos.length} foto{opFotos.length === 1 ? '' : 's'})
+                      </span>
+                    ) : (
+                      <span>+ Subir Fotos y Comentarios</span>
+                    )}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* VISTA TABLET / ESCRITORIO (TABLA COMPLETA >= 768px) */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead>
               <tr className="bg-slate-100 border-b border-slate-200 text-slate-600 font-extrabold uppercase tracking-wider text-[11px]">
@@ -1055,30 +1265,13 @@ export const ProgramacionSemanal: React.FC = () => {
                 />
               </div>
 
-              {/* Subida de Fotos */}
+              {/* Subida de Fotos y Comentarios */}
               <div className="space-y-2.5">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                     <Camera className="w-4 h-4 text-emerald-600" />
-                    <span>Fotos de la Operación ({fotosEjecucion.length})</span>
+                    <span>Fotos y Comentarios ({fotosEjecucion.length})</span>
                   </span>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-slate-500">Etapa foto:</span>
-                    {(['Antes', 'Durante', 'Después'] as const).map((et) => (
-                      <button
-                        key={et}
-                        type="button"
-                        onClick={() => setEtapaNuevaFoto(et)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                          etapaNuevaFoto === et
-                            ? 'bg-slate-900 text-white'
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                        }`}
-                      >
-                        {et}
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -1095,7 +1288,7 @@ export const ProgramacionSemanal: React.FC = () => {
                     </div>
                     <div className="text-left">
                       <span className="font-bold text-sky-800 block">Subir desde Galería / PC</span>
-                      <span className="text-[10px] text-slate-500">JPG, PNG o WEBP (Etapa: {etapaNuevaFoto})</span>
+                      <span className="text-[10px] text-slate-500">JPG, PNG o WEBP (Fotos y Comentarios)</span>
                     </div>
                   </label>
 
@@ -1132,7 +1325,7 @@ export const ProgramacionSemanal: React.FC = () => {
                             className="w-full h-full object-cover"
                           />
                           <span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 text-white text-[10px] font-bold">
-                            {item.etapa}
+                            Foto #{idx + 1}
                           </span>
                           <button
                             type="button"
@@ -1155,7 +1348,7 @@ export const ProgramacionSemanal: React.FC = () => {
                                 prev.map((f, i) => (i === idx ? { ...f, comentario: val } : f))
                               );
                             }}
-                            placeholder="Pie de foto o nota específica (opcional)..."
+                            placeholder="Comentario de la foto (opcional)..."
                             className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded-lg text-[11px]"
                           />
                         </div>

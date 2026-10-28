@@ -26,7 +26,9 @@ import {
   Building,
   Calendar,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  Pencil,
+  Save
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -41,8 +43,9 @@ export const InformesCRR: React.FC = () => {
   const [confirmDeleteIds, setConfirmDeleteIds] = useState<string[] | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Modal Nuevo Informe & Pestaña Activa
+  // Modal Nuevo / Editar Informe & Pestaña Activa
   const [showModal, setShowModal] = useState(false);
+  const [editingInformeId, setEditingInformeId] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState<number>(1);
   const [vistaPreviaDoc, setVistaPreviaDoc] = useState(false);
 
@@ -56,6 +59,9 @@ export const InformesCRR: React.FC = () => {
   const [distribucion, setDistribucion] = useState('Inspección Técnica Arauco / Operaciones 340CRR');
   const [copiaAsignada, setCopiaAsignada] = useState('Inspección Técnica Arauco');
   const [avisoSeleccionado, setAvisoSeleccionado] = useState<any | null>(null);
+  const [avisoNumeroManual, setAvisoNumeroManual] = useState('');
+  const [ordenNumeroManual, setOrdenNumeroManual] = useState('');
+  const [ubicacionTecnicaManual, setUbicacionTecnicaManual] = useState('');
 
   // Sección 1: OBJETIVO
   const [objetivo, setObjetivo] = useState(
@@ -68,9 +74,8 @@ export const InformesCRR: React.FC = () => {
   );
   const [lugarObraFotoUrl, setLugarObraFotoUrl] = useState('');
 
-  // Sección 3: REGISTRO FOTOGRÁFICO
+  // Sección 3: FOTOS Y COMENTARIOS
   const [fotosList, setFotosList] = useState<any[]>([]);
-  const [tempEtapa, setTempEtapa] = useState<'Antes' | 'Durante' | 'Después' | 'General'>('Antes');
   const [tempFotoUrl, setTempFotoUrl] = useState('');
   const [tempDiagnostico, setTempDiagnostico] = useState('');
   const [tempPie, setTempPie] = useState('');
@@ -81,6 +86,7 @@ export const InformesCRR: React.FC = () => {
 
   // Sección 5: FIRMAS
   const sigCanvasElaboro = useRef<SignatureCanvas | null>(null);
+  const [existingFirmaUrl, setExistingFirmaUrl] = useState<string>('');
   const [nombrePreparador, setNombrePreparador] = useState(user?.nombre || 'DAC.');
   const [submitting, setSubmitting] = useState(false);
 
@@ -163,7 +169,7 @@ export const InformesCRR: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  // Manejo de carga de foto para Registro Fotográfico (Cámara o Galería)
+  // Manejo de carga de foto para Fotos y Comentarios (Cámara o Galería)
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -174,21 +180,26 @@ export const InformesCRR: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
-  // Agregar foto a la lista
+  // Agregar foto a la lista (sin duplicados por URL)
   const handleAddFoto = () => {
     if (!tempFotoUrl) {
-      alert('Por favor captura o sube una imagen con la cámara del celular');
+      alert('Por favor captura o sube una imagen');
       return;
     }
-    setFotosList((prev) => [
-      ...prev,
-      {
-        etapa: tempEtapa,
-        url: tempFotoUrl,
-        diagnosticoTecnico: tempDiagnostico || 'Condición observada en relevamiento',
-        pieDeFoto: tempPie || 'Frente de trabajo 340CRR'
+    setFotosList((prev) => {
+      if (prev.some((f) => f.url === tempFotoUrl)) {
+        return prev;
       }
-    ]);
+      return [
+        ...prev,
+        {
+          etapa: 'Comentario',
+          url: tempFotoUrl,
+          diagnosticoTecnico: tempDiagnostico || 'Comentario / Registro en terreno',
+          pieDeFoto: tempPie || 'Frente de trabajo 340CRR'
+        }
+      ];
+    });
     setTempFotoUrl('');
     setTempDiagnostico('');
     setTempPie('');
@@ -204,7 +215,10 @@ export const InformesCRR: React.FC = () => {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (event) => {
-      setAnexosFotosList((prev) => [...prev, event.target?.result as string]);
+      const base64 = event.target?.result as string;
+      if (base64) {
+        setAnexosFotosList((prev) => (prev.includes(base64) ? prev : [...prev, base64]));
+      }
     };
     reader.readAsDataURL(file);
   };
@@ -213,53 +227,135 @@ export const InformesCRR: React.FC = () => {
     setAnexosFotosList((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Guardar informe formal
+  // Abrir instancia de edición de un informe existente sin perder datos en Render
+  const handleOpenEditInforme = (inf: any) => {
+    setEditingInformeId(inf.id);
+    setTipoInforme(inf.tipoInforme || 'INFORME PRELIMINAR');
+    setCodigoInforme(inf.codigoInforme || '');
+    setTitulo(inf.titulo || 'INFORME TÉCNICO CRR');
+    setEmpresaContratista(inf.empresaContratista || 'A DEFINIR');
+    setObservaciones(inf.observaciones || '');
+    setFechaElaboracion(
+      inf.fechaElaboracion
+        ? new Date(inf.fechaElaboracion).toISOString().split('T')[0]
+        : new Date().toISOString().split('T')[0]
+    );
+    setDistribucion(inf.distribucion || 'Inspección Técnica Arauco / Operaciones 340CRR');
+    setCopiaAsignada(inf.copiaAsignada || 'Inspección Técnica Arauco');
+    setAvisoNumeroManual(inf.avisoNumero || '');
+    setOrdenNumeroManual(inf.ordenNumero || '');
+    setUbicacionTecnicaManual(inf.ubicacionTecnica || '');
+
+    const matchingAviso = avisos.find((a) => a.numeroAviso === inf.avisoNumero);
+    setAvisoSeleccionado(matchingAviso || null);
+
+    setObjetivo(inf.objetivo || '');
+    setLugarObraTexto(inf.lugarObraTexto || '');
+    setLugarObraFotoUrl(inf.lugarObraFotoUrl || '');
+
+    // Deduplicar fotos por URL al cargar en el editor
+    const seenUrls = new Set<string>();
+    const uniqueFotos: any[] = [];
+    for (const f of inf.fotos || []) {
+      const url = String(f.url || '').trim();
+      if (!url || seenUrls.has(url)) continue;
+      seenUrls.add(url);
+      uniqueFotos.push({
+        etapa: 'Comentario',
+        url,
+        diagnosticoTecnico: f.diagnosticoTecnico || '',
+        pieDeFoto: f.pieDeFoto || ''
+      });
+    }
+    setFotosList(uniqueFotos);
+
+    setAnexosTexto(inf.anexosTexto || '');
+    let parsedAnexos: string[] = [];
+    if (inf.anexosFotos) {
+      try {
+        const parsed = JSON.parse(inf.anexosFotos);
+        if (Array.isArray(parsed)) parsedAnexos = parsed;
+      } catch {
+        parsedAnexos = [];
+      }
+    }
+    setAnexosFotosList(parsedAnexos);
+    setExistingFirmaUrl(inf.firmaElaboroUrl || '');
+    setActiveStep(1);
+    setVistaPreviaDoc(false);
+    setShowModal(true);
+  };
+
+  // Guardar informe formal (Crear nuevo o Actualizar existente en edición)
   const handleCrearInforme = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
 
-    let firmaElaboroUrl = '';
+    let firmaElaboroUrl = existingFirmaUrl;
     if (sigCanvasElaboro.current && !sigCanvasElaboro.current.isEmpty()) {
       firmaElaboroUrl = sigCanvasElaboro.current.getTrimmedCanvas().toDataURL('image/png');
     }
 
+    // Deduplicar fotos antes de enviar
+    const seenUrls = new Set<string>();
+    const uniqueFotos = fotosList.filter((f) => {
+      const u = String(f.url || '').trim();
+      if (!u || seenUrls.has(u)) return false;
+      seenUrls.add(u);
+      return true;
+    });
+
+    const payload = {
+      codigoInforme: codigoInforme.trim() || undefined,
+      tipoInforme,
+      titulo: titulo || 'INFORME TÉCNICO CRR',
+      empresaContratista: empresaContratista || 'A DEFINIR',
+      observaciones,
+      distribucion,
+      copiaAsignada,
+      avisoNumero: avisoSeleccionado?.numeroAviso || avisoNumeroManual || undefined,
+      ordenNumero: avisoSeleccionado?.numeroOrden || ordenNumeroManual || undefined,
+      ubicacionTecnica: avisoSeleccionado?.ubicacionTecnica || ubicacionTecnicaManual || undefined,
+      objetivo,
+      lugarObraTexto,
+      lugarObraFotoUrl: lugarObraFotoUrl || '',
+      anexosTexto,
+      anexosFotos: anexosFotosList.length > 0 ? JSON.stringify(anexosFotosList) : '',
+      firmaElaboroUrl: firmaElaboroUrl || undefined,
+      fotos: uniqueFotos
+    };
+
     try {
-      await api.createInforme({
-        codigoInforme: codigoInforme.trim() || undefined,
-        tipoInforme,
-        titulo: titulo || 'INFORME TÉCNICO CRR',
-        empresaContratista: empresaContratista || 'A DEFINIR',
-        observaciones,
-        distribucion,
-        copiaAsignada,
-        avisoNumero: avisoSeleccionado?.numeroAviso,
-        ordenNumero: avisoSeleccionado?.numeroOrden,
-        ubicacionTecnica: avisoSeleccionado?.ubicacionTecnica,
-        objetivo,
-        lugarObraTexto,
-        lugarObraFotoUrl: lugarObraFotoUrl || undefined,
-        anexosTexto,
-        anexosFotos: anexosFotosList.length > 0 ? JSON.stringify(anexosFotosList) : undefined,
-        firmaElaboroUrl: firmaElaboroUrl || undefined,
-        fotos: fotosList
-      });
+      if (editingInformeId) {
+        await api.updateInforme(editingInformeId, payload);
+      } else {
+        await api.createInforme(payload);
+      }
 
       setShowModal(false);
       resetForm();
       await loadData();
     } catch (err: any) {
-      alert(err.message || 'Error al emitir el informe técnico');
+      alert(err.message || 'Error al guardar el informe técnico');
     } finally {
       setSubmitting(false);
     }
   };
 
   const resetForm = () => {
+    setEditingInformeId(null);
+    setCodigoInforme('');
+    setTipoInforme('INFORME PRELIMINAR');
     setTitulo('REPARACIÓN Y TRATAMIENTO ANTICORROSIVO ESTRUCTURAL');
     setEmpresaContratista('A DEFINIR');
+    setObservaciones('Relevamiento técnico inicial para tratamiento anticorrosivo.');
     setLugarObraFotoUrl('');
     setFotosList([]);
     setAnexosFotosList([]);
+    setExistingFirmaUrl('');
+    setAvisoNumeroManual('');
+    setOrdenNumeroManual('');
+    setUbicacionTecnicaManual('');
     setActiveStep(1);
     setVistaPreviaDoc(false);
   };
@@ -286,14 +382,15 @@ export const InformesCRR: React.FC = () => {
             </h1>
             <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
               Celulosa Puerto Esperanza • ISO 14001 • OHSAS 18001 • Servicios Auxiliares Dpto. 340CRR.
-              Permite la emisión completa en terreno desde el celular con captura directa de fotos.
+              Permite la emisión y edición completa en terreno desde PC o celular con fotos y comentarios.
             </p>
           </div>
 
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
             <button
               onClick={() => {
-                if (avisos.length > 0 && !avisoSeleccionado) {
+                resetForm();
+                if (avisos.length > 0) {
                   setAvisoSeleccionado(avisos[0]);
                   setTitulo(`Informe Técnico - Aviso ${avisos[0].numeroAviso}`);
                 }
@@ -417,7 +514,7 @@ export const InformesCRR: React.FC = () => {
                     {inf.fotos && inf.fotos.length > 0 && (
                       <div className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-slate-700 bg-sky-50 px-3 py-1.5 rounded-lg border border-sky-100">
                         <Camera className="w-3.5 h-3.5 text-sky-600" />
-                        <span>{inf.fotos.length} fotos con diagnóstico técnico</span>
+                        <span>{inf.fotos.length} fotos y comentarios</span>
                       </div>
                     )}
                   </div>
@@ -427,12 +524,21 @@ export const InformesCRR: React.FC = () => {
                       href={`/api/informes/${inf.id}/export-html`}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-sm"
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition shadow-sm"
                     >
                       <Printer className="w-4 h-4 text-sky-400 shrink-0" />
                       <span>Ver / Imprimir</span>
                       <ExternalLink className="w-3 h-3 text-slate-400 shrink-0" />
                     </a>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditInforme(inf)}
+                      className="px-3 py-2.5 bg-sky-50 hover:bg-sky-600 text-sky-700 hover:text-white border border-sky-200 hover:border-sky-600 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+                      title={`Editar informe ${inf.codigoInforme}`}
+                    >
+                      <Pencil className="w-3.5 h-3.5 shrink-0" />
+                      <span>Editar</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setConfirmDeleteIds([inf.id])}
@@ -521,14 +627,16 @@ export const InformesCRR: React.FC = () => {
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap mb-1">
                   <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-400/30">
-                    IM- CRR Modelo
+                    {editingInformeId ? 'Instancia de Edición de Informe' : 'IM- CRR Modelo'}
                   </span>
                   <span className="text-[10px] text-slate-400 font-mono">
-                    INF_ CRR – 00XXX - 2026
+                    {codigoInforme || 'INF_ CRR – 00XXX - 2026'}
                   </span>
                 </div>
                 <h3 className="font-extrabold text-base sm:text-lg text-white truncate">
-                  Generación de Informe Técnico en Terreno
+                  {editingInformeId
+                    ? `Editando Informe: ${codigoInforme || titulo}`
+                    : 'Generación de Informe Técnico en Terreno'}
                 </h3>
                 <p className="text-xs text-slate-400 hidden sm:block">
                   Departamento de Corrosión - Celulosa Puerto Esperanza Arauco (ISO 14001 / OHSAS 18001)
@@ -550,7 +658,10 @@ export const InformesCRR: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditingInformeId(null);
+                  }}
                   className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
                   title="Cerrar"
                 >
@@ -566,7 +677,7 @@ export const InformesCRR: React.FC = () => {
                   { step: 1, label: 'Datos & Meta', icon: FileText },
                   { step: 2, label: '1. Objetivo', icon: Target },
                   { step: 3, label: '2. Lugar Obra', icon: MapPin },
-                  { step: 4, label: `3. Fotos (${fotosList.length})`, icon: Camera },
+                  { step: 4, label: `3. Fotos y Comentarios (${fotosList.length})`, icon: Camera },
                   { step: 5, label: '4. Anexos', icon: Paperclip },
                   { step: 6, label: '5. Firmas', icon: PenTool }
                 ].map((item) => {
@@ -647,16 +758,15 @@ export const InformesCRR: React.FC = () => {
                     <p className="text-slate-700">{lugarObraTexto}</p>
                   </div>
 
-                  {/* 3. REGISTRO FOTOGRÁFICO */}
+                  {/* 3. FOTOS Y COMENTARIOS */}
                   <div className="space-y-1">
-                    <h3 className="font-bold text-xs uppercase text-slate-900 border-b pb-0.5">3. REGISTRO FOTOGRÁFICO.</h3>
+                    <h3 className="font-bold text-xs uppercase text-slate-900 border-b pb-0.5">3. FOTOS Y COMENTARIOS.</h3>
                     <p className="text-slate-500 italic text-[10px]">Nota2: Cargar fotos con comentarios del registro.</p>
                     <div className="grid grid-cols-2 gap-2 pt-1">
                       {fotosList.map((f, i) => (
                         <div key={i} className="border rounded-md p-1.5 bg-slate-50">
                           <img src={f.url} alt="Foto" className="w-full h-24 object-cover rounded" />
-                          <span className="font-bold text-[9px] uppercase text-sky-800 block mt-1">{f.etapa}</span>
-                          <p className="text-[10px] text-slate-800 font-semibold">{f.diagnosticoTecnico}</p>
+                          <p className="text-[10px] text-slate-800 font-semibold mt-1">{f.diagnosticoTecnico}</p>
                         </div>
                       ))}
                     </div>
@@ -706,6 +816,8 @@ export const InformesCRR: React.FC = () => {
                             <option value="INFORME PRELIMINAR">INFORME PRELIMINAR</option>
                             <option value="INFORME TÉCNICO CRR">INFORME TÉCNICO CRR</option>
                             <option value="INFORME FINAL DE ENTREGA">INFORME FINAL DE ENTREGA</option>
+                            <option value="INFORME TRABAJOS DE LA SEMANA">INFORME TRABAJOS DE LA SEMANA</option>
+                            <option value="INFORME MENSUAL DE TRABAJOS PS">INFORME MENSUAL DE TRABAJOS PS</option>
                           </select>
                         </div>
 
@@ -935,65 +1047,39 @@ export const InformesCRR: React.FC = () => {
                     </div>
                   )}
 
-                  {/* PASO 4: SECCIÓN 3 - REGISTRO FOTOGRÁFICO */}
+                  {/* PASO 4: SECCIÓN 3 - FOTOS Y COMENTARIOS */}
                   {activeStep === 4 && (
                     <div className="space-y-4 animate-in fade-in duration-150">
                       <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200">
-                        <span className="font-extrabold text-xs text-slate-900 uppercase block">3. REGISTRO FOTOGRÁFICO.</span>
+                        <span className="font-extrabold text-xs text-slate-900 uppercase block">3. FOTOS Y COMENTARIOS.</span>
                         <p className="text-[11px] text-slate-500 italic mt-0.5">
-                          Nota2: Cargar fotos con comentarios del registro.
+                          Nota2: Cargar fotos y comentarios del informe. Puedes editar los comentarios o quitar fotos duplicadas/innecesarias.
                         </p>
                       </div>
 
                       {/* Tarjeta para agregar nueva foto */}
                       <div className="bg-white p-4 rounded-xl border border-slate-300 shadow-sm space-y-3">
                         <span className="font-bold text-slate-800 text-xs block">
-                          Nueva Evidencia Fotográfica en Terreno
+                          Agregar Foto y Comentario
                         </span>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 gap-2.5">
                           <div>
-                            <label className="block font-semibold text-slate-700 mb-1">Etapa de Trabajo</label>
-                            <div className="grid grid-cols-2 gap-1.5">
-                              {(['Antes', 'Durante', 'Después', 'General'] as const).map((etp) => (
-                                <button
-                                  key={etp}
-                                  type="button"
-                                  onClick={() => setTempEtapa(etp)}
-                                  className={`py-1.5 rounded-lg text-[11px] font-bold transition cursor-pointer ${
-                                    tempEtapa === etp
-                                      ? etp === 'Antes'
-                                        ? 'bg-rose-600 text-white'
-                                        : etp === 'Durante'
-                                        ? 'bg-amber-600 text-white'
-                                        : etp === 'Después'
-                                        ? 'bg-emerald-600 text-white'
-                                        : 'bg-sky-600 text-white'
-                                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                                  }`}
-                                >
-                                  {etp}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="sm:col-span-2">
                             <label className="block font-semibold text-slate-700 mb-1">
-                              Diagnóstico Técnico / Comentario
+                              Comentario / Diagnóstico de la Foto
                             </label>
                             <input
                               type="text"
                               value={tempDiagnostico}
                               onChange={(e) => setTempDiagnostico(e.target.value)}
-                              placeholder="Ej: Corrosión severa en ala inferior de viga IPN..."
+                              placeholder="Escribe el comentario técnico o descripción del trabajo en la foto..."
                               className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-sky-500"
                             />
                             <input
                               type="text"
                               value={tempPie}
                               onChange={(e) => setTempPie(e.target.value)}
-                              placeholder="Pie de foto opcional (ej: Vista lateral cota +14m)"
+                              placeholder="Ubicación / Pie de foto opcional (ej: Sector 340CRR - Vista lateral)"
                               className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-[11px] mt-1.5"
                             />
                           </div>
@@ -1030,7 +1116,7 @@ export const InformesCRR: React.FC = () => {
                             <div className="flex items-center gap-2 min-w-0">
                               <img src={tempFotoUrl} alt="Vista previa" className="w-12 h-12 rounded object-cover border" />
                               <span className="text-[11px] font-bold text-emerald-800 truncate">
-                                Foto lista para registrar
+                                Foto lista para agregar al informe
                               </span>
                             </div>
                             <button
@@ -1038,57 +1124,79 @@ export const InformesCRR: React.FC = () => {
                               onClick={handleAddFoto}
                               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-bold text-xs shadow transition cursor-pointer shrink-0"
                             >
-                              + Agregar a Grilla
+                              + Agregar Foto y Comentario
                             </button>
                           </div>
                         )}
                       </div>
 
-                      {/* Lista de Fotos Registradas */}
+                      {/* Lista de Fotos y Comentarios Registrados (Editables) */}
                       <div className="space-y-2">
                         <span className="font-bold text-slate-700 text-xs">
-                          Fotos en este Informe ({fotosList.length})
+                          Fotos y Comentarios en este Informe ({fotosList.length})
                         </span>
 
                         {fotosList.length === 0 ? (
                           <div className="p-6 text-center bg-slate-50 border border-dashed rounded-xl text-slate-400 text-xs">
-                            No se han cargado fotos aún. Captura las fotos de terreno con el botón superior.
+                            No se han cargado fotos aún. Sube o captura fotos con el botón superior.
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             {fotosList.map((f, i) => (
                               <div
                                 key={i}
-                                className="bg-white p-2.5 rounded-xl border border-slate-200 shadow-sm flex gap-3 relative group"
+                                className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 relative group"
                               >
-                                <img src={f.url} alt="Evidencia" className="w-20 h-20 object-cover rounded-lg border shrink-0" />
-                                <div className="min-w-0 flex-1">
-                                  <span
-                                    className={`inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider mb-1 ${
-                                      f.etapa === 'Antes'
-                                        ? 'bg-rose-100 text-rose-800'
-                                        : f.etapa === 'Durante'
-                                        ? 'bg-amber-100 text-amber-800'
-                                        : f.etapa === 'Después'
-                                        ? 'bg-emerald-100 text-emerald-800'
-                                        : 'bg-sky-100 text-sky-800'
-                                    }`}
-                                  >
-                                    {f.etapa}
-                                  </span>
-                                  <p className="font-bold text-slate-800 text-xs truncate">{f.diagnosticoTecnico}</p>
-                                  {f.pieDeFoto && (
-                                    <p className="text-[10px] text-slate-500 truncate mt-0.5">{f.pieDeFoto}</p>
-                                  )}
+                                <div className="flex gap-3 items-start">
+                                  <img
+                                    src={f.url}
+                                    alt={`Foto ${i + 1}`}
+                                    className="w-24 h-24 object-cover rounded-lg border shrink-0"
+                                  />
+                                  <div className="min-w-0 flex-1 space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-extrabold bg-sky-100 text-sky-900">
+                                        Foto #{i + 1}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveFoto(i)}
+                                        className="text-slate-400 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition cursor-pointer"
+                                        title="Quitar esta foto del informe"
+                                      >
+                                        <Trash2 className="w-4 h-4" />
+                                      </button>
+                                    </div>
+                                    <input
+                                      type="text"
+                                      value={f.diagnosticoTecnico || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setFotosList((prev) =>
+                                          prev.map((item, idx) =>
+                                            idx === i ? { ...item, diagnosticoTecnico: val } : item
+                                          )
+                                        );
+                                      }}
+                                      placeholder="Comentario de la foto..."
+                                      className="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                    />
+                                    <input
+                                      type="text"
+                                      value={f.pieDeFoto || ''}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setFotosList((prev) =>
+                                          prev.map((item, idx) =>
+                                            idx === i ? { ...item, pieDeFoto: val } : item
+                                          )
+                                        );
+                                      }}
+                                      placeholder="Pie de foto / Ubicación..."
+                                      className="w-full px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[10px] text-slate-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                    />
+                                  </div>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveFoto(i)}
-                                  className="text-slate-400 hover:text-rose-600 p-1 shrink-0 self-start cursor-pointer"
-                                  title="Eliminar foto"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
                               </div>
                             ))}
                           </div>
@@ -1226,14 +1334,29 @@ export const InformesCRR: React.FC = () => {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setEditingInformeId(null);
+                  }}
                   className="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-bold text-xs hover:bg-slate-100 transition cursor-pointer"
                 >
                   Cancelar
                 </button>
+
+                {editingInformeId && !vistaPreviaDoc && activeStep < 6 && (
+                  <button
+                    type="button"
+                    disabled={submitting}
+                    onClick={handleCrearInforme}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs shadow transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>{submitting ? 'Guardando...' : 'Guardar Cambios'}</span>
+                  </button>
+                )}
 
                 {!vistaPreviaDoc && activeStep < 6 ? (
                   <button
@@ -1252,7 +1375,13 @@ export const InformesCRR: React.FC = () => {
                     className="px-5 py-2.5 bg-gradient-to-r from-sky-600 to-emerald-600 hover:from-sky-500 hover:to-emerald-500 text-white rounded-xl font-bold text-xs shadow-lg transition active:scale-95 flex items-center gap-2 cursor-pointer disabled:opacity-50"
                   >
                     <CheckCircle className="w-4 h-4" />
-                    <span>{submitting ? 'Emitiendo...' : 'Emitir Informe Oficial CRR'}</span>
+                    <span>
+                      {submitting
+                        ? 'Guardando...'
+                        : editingInformeId
+                        ? 'Guardar Cambios del Informe'
+                        : 'Emitir Informe Oficial CRR'}
+                    </span>
                   </button>
                 )}
               </div>

@@ -69,6 +69,7 @@ export class ProgramacionAraucoController {
       diagnosticoTecnico: string;
       pieDeFoto: string;
     }> = [];
+    const seenUrlsSemanal = new Set<string>();
 
     const lineasConEvidencia: string[] = [];
     const lineasResumenGeneral: string[] = [];
@@ -98,12 +99,14 @@ export class ProgramacionAraucoController {
       }
 
       for (const f of parsedFotos) {
-        const url = typeof f === 'string' ? f : f.url;
-        if (!url) continue;
-        const etapa = (typeof f === 'object' && f.etapa) ? f.etapa : 'Durante';
+        const rawUrl = typeof f === 'string' ? f : f.url;
+        const url = String(rawUrl || '').trim();
+        if (!url || seenUrlsSemanal.has(url)) continue;
+        seenUrlsSemanal.add(url);
+
         const comentFoto = (typeof f === 'object' && f.comentario) ? f.comentario : '';
         fotosParaInforme.push({
-          etapa,
+          etapa: 'Comentario',
           url,
           diagnosticoTecnico: `OT ${op.numeroOrden} / Op ${op.numeroOperacion} — ${op.textoOperacion}${
             comentFoto
@@ -137,32 +140,34 @@ export class ProgramacionAraucoController {
     });
 
     if (existente) {
-      await prisma.fotoInformeCRR.deleteMany({
-        where: { informeId: existente.id }
-      });
+      const actualizado = await prisma.$transaction(async (tx) => {
+        await tx.fotoInformeCRR.deleteMany({
+          where: { informeId: existente.id }
+        });
 
-      const actualizado = await prisma.informeCRR.update({
-        where: { id: existente.id },
-        data: {
-          tipoInforme: 'INFORME TRABAJOS DE LA SEMANA',
-          titulo: `INFORME DE TRABAJOS DE LA SEMANA - ${codigoPS}`,
-          observaciones,
-          ubicacionTecnica: `Planta Celulosa Puerto Esperanza - Sector ${ptoTbjo}`,
-          avisoNumero: `PS${semana}-${anio}`,
-          ordenNumero: `${operaciones.length} OTs`,
-          objetivo,
-          lugarObraTexto,
-          anexosTexto,
-          fotos: {
-            create: fotosParaInforme
+        return await tx.informeCRR.update({
+          where: { id: existente.id },
+          data: {
+            tipoInforme: 'INFORME TRABAJOS DE LA SEMANA',
+            titulo: `INFORME DE TRABAJOS DE LA SEMANA - ${codigoPS}`,
+            observaciones,
+            ubicacionTecnica: `Planta Celulosa Puerto Esperanza - Sector ${ptoTbjo}`,
+            avisoNumero: `PS${semana}-${anio}`,
+            ordenNumero: `${operaciones.length} OTs`,
+            objetivo,
+            lugarObraTexto,
+            anexosTexto,
+            fotos: {
+              create: fotosParaInforme
+            }
+          },
+          include: {
+            fotos: true,
+            responsable: {
+              select: { id: true, nombre: true, email: true }
+            }
           }
-        },
-        include: {
-          fotos: true,
-          responsable: {
-            select: { id: true, nombre: true, email: true }
-          }
-        }
+        });
       });
       return actualizado;
     } else {
@@ -255,6 +260,7 @@ export class ProgramacionAraucoController {
       diagnosticoTecnico: string;
       pieDeFoto: string;
     }> = [];
+    const seenUrlsMes = new Set<string>();
 
     const lineasConAvanceMes: string[] = [];
     const lineasTodasMes: string[] = [];
@@ -285,12 +291,14 @@ export class ProgramacionAraucoController {
       }
 
       for (const f of parsedFotos) {
-        const url = typeof f === 'string' ? f : f.url;
-        if (!url) continue;
-        const etapa = typeof f === 'object' && f.etapa ? f.etapa : 'Durante';
+        const rawUrl = typeof f === 'string' ? f : f.url;
+        const url = String(rawUrl || '').trim();
+        if (!url || seenUrlsMes.has(url)) continue;
+        seenUrlsMes.add(url);
+
         const comentFoto = typeof f === 'object' && f.comentario ? f.comentario : '';
         fotosParaInformeMes.push({
-          etapa,
+          etapa: 'Comentario',
           url,
           diagnosticoTecnico: `[${etiquetaPS}] OT ${op.numeroOrden} / Op ${op.numeroOperacion} — ${op.textoOperacion}${
             comentFoto
@@ -324,26 +332,28 @@ export class ProgramacionAraucoController {
     });
 
     if (existente) {
-      await prisma.fotoInformeCRR.deleteMany({
-        where: { informeId: existente.id }
-      });
+      return await prisma.$transaction(async (tx) => {
+        await tx.fotoInformeCRR.deleteMany({
+          where: { informeId: existente.id }
+        });
 
-      return await prisma.informeCRR.update({
-        where: { id: existente.id },
-        data: {
-          tipoInforme: 'INFORME MENSUAL DE TRABAJOS PS',
-          titulo: `INFORME MENSUAL DE TRABAJOS EJECUTADOS - ${nombreMes} ${anio} (${ptoTbjo})`,
-          observaciones,
-          avisoNumero: `MES ${String(mes).padStart(2, '0')}/${anio}`,
-          ordenNumero: `${operacionesMes.length} OTs`,
-          objetivo,
-          lugarObraTexto,
-          anexosTexto,
-          fotos: {
-            create: fotosParaInformeMes
-          }
-        },
-        include: { fotos: true }
+        return await tx.informeCRR.update({
+          where: { id: existente.id },
+          data: {
+            tipoInforme: 'INFORME MENSUAL DE TRABAJOS PS',
+            titulo: `INFORME MENSUAL DE TRABAJOS EJECUTADOS - ${nombreMes} ${anio} (${ptoTbjo})`,
+            observaciones,
+            avisoNumero: `MES ${String(mes).padStart(2, '0')}/${anio}`,
+            ordenNumero: `${operacionesMes.length} OTs`,
+            objetivo,
+            lugarObraTexto,
+            anexosTexto,
+            fotos: {
+              create: fotosParaInformeMes
+            }
+          },
+          include: { fotos: true }
+        });
       });
     } else {
       return await prisma.informeCRR.create({
@@ -714,11 +724,26 @@ export class ProgramacionAraucoController {
         return res.status(404).json({ message: 'Operación del PS no encontrada' });
       }
 
-      const serializedFotos = Array.isArray(fotosEjecucion)
-        ? JSON.stringify(fotosEjecucion)
-        : typeof fotosEjecucion === 'string'
-        ? fotosEjecucion
-        : '[]';
+      let rawFotos: any[] = [];
+      if (Array.isArray(fotosEjecucion)) {
+        rawFotos = fotosEjecucion;
+      } else if (typeof fotosEjecucion === 'string') {
+        try {
+          const parsed = JSON.parse(fotosEjecucion);
+          if (Array.isArray(parsed)) rawFotos = parsed;
+        } catch {
+          rawFotos = [];
+        }
+      }
+
+      const seenOpUrls = new Set<string>();
+      const dedupFotos = rawFotos.filter((f) => {
+        const u = String(typeof f === 'string' ? f : f?.url || '').trim();
+        if (!u || seenOpUrls.has(u)) return false;
+        seenOpUrls.add(u);
+        return true;
+      });
+      const serializedFotos = JSON.stringify(dedupFotos);
 
       const opActualizada = await prisma.operacionOM.update({
         where: { id },
@@ -827,8 +852,8 @@ export class ProgramacionAraucoController {
   }
 
   /**
-   * Sube e importa el archivo oficial del programa semanal (ej. PS442026 340CRR.xlsm)
-   * y arma/actualiza el informe semanal correspondiente
+   * Sube e importa el archivo oficial del programa semanal (ej. PS432026 340CRR.xlsm / PS442026 340CRR.xlsm)
+   * y arma/actualiza el informe semanal y mensual correspondiente
    */
   public static async uploadPSFile(req: Request, res: Response) {
     try {
@@ -836,22 +861,39 @@ export class ProgramacionAraucoController {
         return res.status(400).json({ message: 'No se adjuntó ningún archivo (.xlsm o .xlsx).' });
       }
 
+      const targetSemana = req.body?.semana ? parseInt(String(req.body.semana), 10) : undefined;
+      const targetAnio = req.body?.anio ? parseInt(String(req.body.anio), 10) : undefined;
+
       const summary = await AraucoProgramParserService.processProgramFile(
         req.file.buffer,
-        req.file.originalname
+        req.file.originalname,
+        targetSemana,
+        targetAnio
       );
 
-      // Armar/actualizar el Informe Semanal del PS en curso al importar el archivo
-      const informeSemanal = await ProgramacionAraucoController.syncInformeSemanal(
-        summary.semana,
-        summary.anio,
-        summary.ptoTbjo
-      );
+      const mesProg = summary.fechaInicio
+        ? new Date(summary.fechaInicio).getUTCMonth() + 1
+        : new Date().getMonth() + 1;
+
+      // Armar/actualizar el Informe Semanal del PS importado y el Informe Mensual Consolidado
+      const [informeSemanal, informeMensual] = await Promise.all([
+        ProgramacionAraucoController.syncInformeSemanal(
+          summary.semana,
+          summary.anio,
+          summary.ptoTbjo
+        ),
+        ProgramacionAraucoController.syncInformeMensual(
+          mesProg,
+          summary.anio,
+          summary.ptoTbjo
+        )
+      ]);
 
       return res.json({
         message: 'Programa semanal Arauco importado con éxito',
         summary,
-        informeSemanal
+        informeSemanal,
+        informeMensual
       });
     } catch (error: any) {
       console.error('Error al importar programa semanal:', error);
