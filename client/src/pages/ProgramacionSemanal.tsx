@@ -468,10 +468,10 @@ export const ProgramacionSemanal: React.FC = () => {
                 href={`/api/informes/${data.informeSemanal.id}/export-html`}
                 target="_blank"
                 rel="noreferrer"
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold shadow transition"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold shadow transition"
               >
                 <FileText className="w-4 h-4" />
-                <span>Ver / Imprimir Informe {codigoPSActual}</span>
+                <span>Ver / Descargar Informe {codigoPSActual}</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
             ) : (
@@ -479,18 +479,42 @@ export const ProgramacionSemanal: React.FC = () => {
                 type="button"
                 onClick={handleSyncInformeSemanal}
                 disabled={syncingInforme}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-extrabold shadow transition cursor-pointer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-extrabold shadow transition cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" />
                 <span>{syncingInforme ? 'Generando...' : `Inicializar Informe ${codigoPSActual}`}</span>
               </button>
             )}
+
+            {data?.informeMensual ? (
+              <a
+                href={`/api/informes/${data.informeMensual.id}/export-html`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-extrabold shadow transition"
+              >
+                <Printer className="w-4 h-4" />
+                <span>Descargar Informe Consolidado del Mes ({data.codigoMensual})</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSyncInformeSemanal}
+                disabled={syncingInforme}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-sky-300 border border-sky-700 rounded-xl text-[11px] font-bold transition cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Generar Informe Consolidado del Mes</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => navigate('/informes')}
               className="flex items-center justify-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-[11px] font-bold transition cursor-pointer"
             >
-              <span>Ir a sección Informes CRR ({sysStatus?.registros?.informesCRR ?? 1})</span>
+              <span>Ver todos en Informes CRR ({sysStatus?.registros?.informesCRR ?? 1})</span>
             </button>
           </div>
         </div>

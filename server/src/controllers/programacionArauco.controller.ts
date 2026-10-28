@@ -199,6 +199,180 @@ export class ProgramacionAraucoController {
   }
 
   /**
+   * Sincroniza y almacena automáticamente el Informe Mensual Consolidado
+   * uniendo todas las semanas PS del mes en curso (ej: "INF-MES-10-2026 340CRR")
+   * para poder descargarlo completo al final del mes.
+   */
+  public static async syncInformeMensual(
+    mes: number,
+    anio: number,
+    ptoTbjo: string = '340CRR',
+    userId?: string
+  ) {
+    const MESES = [
+      'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
+      'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'
+    ];
+    const nombreMes = MESES[(mes - 1) % 12] || 'MES';
+    const codigoMensual = `INF-MES-${String(mes).padStart(2, '0')}-${anio} ${ptoTbjo}`;
+
+    let responsableId = userId;
+    if (!responsableId) {
+      const firstUser = await prisma.usuario.findFirst({ orderBy: { creadoEn: 'asc' } });
+      if (!firstUser) return null;
+      responsableId = firstUser.id;
+    }
+
+    // Buscar todas las dotaciones de ese año y filtrar las del mes correspondiente (o todas las semanas cargadas del mes)
+    const todasDotaciones = await prisma.dotacionSemanalArauco.findMany({
+      where: { anio, ptoTbjo },
+      orderBy: { semana: 'asc' }
+    });
+
+    const dotacionesMes = todasDotaciones.filter((d) => {
+      const m = new Date(d.fechaInicio).getUTCMonth() + 1;
+      return m === mes;
+    });
+
+    const semanasDelMes =
+      dotacionesMes.length > 0
+        ? dotacionesMes.map((d) => d.semana)
+        : todasDotaciones.map((d) => d.semana);
+
+    const operacionesMes = await prisma.operacionOM.findMany({
+      where: {
+        anioProg: anio,
+        ...(semanasDelMes.length > 0 ? { semanaProg: { in: semanasDelMes } } : { semanaProg: { not: null } }),
+        ...(ptoTbjo ? { ptoTbjo: { contains: ptoTbjo } } : {})
+      },
+      orderBy: [{ semanaProg: 'asc' }, { numeroOrden: 'asc' }, { numeroOperacion: 'asc' }]
+    });
+
+    const hhProgTotalMes = operacionesMes.reduce((acc, o) => acc + o.hhTotalProgramado, 0);
+    const fotosParaInformeMes: Array<{
+      etapa: string;
+      url: string;
+      diagnosticoTecnico: string;
+      pieDeFoto: string;
+    }> = [];
+
+    const lineasConAvanceMes: string[] = [];
+    const lineasTodasMes: string[] = [];
+
+    for (const op of operacionesMes) {
+      let parsedFotos: any[] = [];
+      if (op.fotosEjecucion) {
+        try {
+          const parsed = JSON.parse(op.fotosEjecucion);
+          if (Array.isArray(parsed)) parsedFotos = parsed;
+        } catch {
+          // ignore
+        }
+      }
+
+      const etiquetaPS = `PS${op.semanaProg}${op.anioProg}`;
+      const estado = op.estadoEjecucion || 'Pendiente';
+      const tieneComentario = Boolean(op.comentariosEjecucion && op.comentariosEjecucion.trim());
+      const tieneFotos = parsedFotos.length > 0;
+
+      const textoLinea = `• [${etiquetaPS}] OT ${op.numeroOrden} (Op. ${op.numeroOperacion}) | Ubic: ${op.ubicacionTecnica || '340CRR'} | ${op.textoOperacion} (${op.hhTotalProgramado} HH) — Estado: [${estado}]${
+        tieneComentario ? `\n   ↳ Comentario / Trabajo Realizado: ${op.comentariosEjecucion?.trim()}` : ''
+      }${tieneFotos ? ` (${parsedFotos.length} foto${parsedFotos.length > 1 ? 's' : ''})` : ''}`;
+
+      lineasTodasMes.push(textoLinea);
+      if (tieneComentario || tieneFotos || estado !== 'Pendiente') {
+        lineasConAvanceMes.push(textoLinea);
+      }
+
+      for (const f of parsedFotos) {
+        const url = typeof f === 'string' ? f : f.url;
+        if (!url) continue;
+        const etapa = typeof f === 'object' && f.etapa ? f.etapa : 'Durante';
+        const comentFoto = typeof f === 'object' && f.comentario ? f.comentario : '';
+        fotosParaInformeMes.push({
+          etapa,
+          url,
+          diagnosticoTecnico: `[${etiquetaPS}] OT ${op.numeroOrden} / Op ${op.numeroOperacion} — ${op.textoOperacion}${
+            comentFoto
+              ? `: ${comentFoto}`
+              : tieneComentario
+              ? `: ${op.comentariosEjecucion}`
+              : ''
+          }`,
+          pieDeFoto: `Cierre Mensual ${nombreMes} ${anio} (${etiquetaPS}) | Ubic: ${op.ubicacionTecnica || '340CRR'} (${op.hhTotalProgramado} HH)`
+        });
+      }
+    }
+
+    const objetivo = `Informe Mensual Consolidado de Trabajos Programados y Ejecutados en ${nombreMes} ${anio} (Puesto ${ptoTbjo}). Integra las semanas: ${
+      semanasDelMes.map((s) => `PS${s}${anio}`).join(', ') || 'En curso'
+    }. Total Operaciones del Mes: ${operacionesMes.length} (${hhProgTotalMes} HH programadas). Operaciones con evidencia/comentarios de cierre: ${lineasConAvanceMes.length} (${fotosParaInformeMes.length} fotografías).`;
+
+    const observaciones = `Cierre Mensual ${nombreMes} ${anio} (${ptoTbjo}): ${lineasConAvanceMes.length} líneas con comentarios técnicos y ${fotosParaInformeMes.length} evidencias fotográficas acumuladas.`;
+
+    const lugarObraTexto =
+      lineasConAvanceMes.length > 0
+        ? `RESUMEN DE TRABAJOS CON COMENTARIOS Y EVIDENCIAS DEL MES DE ${nombreMes} ${anio}:\n${lineasConAvanceMes.join('\n\n')}\n\n---\nDETALLE GENERAL DE OPERACIONES DEL MES (${operacionesMes.length} líneas):\n${lineasTodasMes.join('\n')}`
+        : `DETALLE DE OPERACIONES PROGRAMADAS EN ${nombreMes} ${anio} (${operacionesMes.length} líneas):\n${lineasTodasMes.join('\n')}`;
+
+    const anexosTexto = `Consolidado Mensual ${nombreMes} ${anio} — Programas Semanales incluidos: ${
+      semanasDelMes.map((s) => `PS${s}${anio}`).join(', ')
+    }. Total Horas Hombre Programadas en el Mes: ${hhProgTotalMes} HH.`;
+
+    const existente = await prisma.informeCRR.findUnique({
+      where: { codigoInforme: codigoMensual }
+    });
+
+    if (existente) {
+      await prisma.fotoInformeCRR.deleteMany({
+        where: { informeId: existente.id }
+      });
+
+      return await prisma.informeCRR.update({
+        where: { id: existente.id },
+        data: {
+          tipoInforme: 'INFORME MENSUAL DE TRABAJOS PS',
+          titulo: `INFORME MENSUAL DE TRABAJOS EJECUTADOS - ${nombreMes} ${anio} (${ptoTbjo})`,
+          observaciones,
+          avisoNumero: `MES ${String(mes).padStart(2, '0')}/${anio}`,
+          ordenNumero: `${operacionesMes.length} OTs`,
+          objetivo,
+          lugarObraTexto,
+          anexosTexto,
+          fotos: {
+            create: fotosParaInformeMes
+          }
+        },
+        include: { fotos: true }
+      });
+    } else {
+      return await prisma.informeCRR.create({
+        data: {
+          codigoInforme: codigoMensual,
+          tipoInforme: 'INFORME MENSUAL DE TRABAJOS PS',
+          titulo: `INFORME MENSUAL DE TRABAJOS EJECUTADOS - ${nombreMes} ${anio} (${ptoTbjo})`,
+          empresaContratista: 'DOTACIÓN PROPIA / CONTRATISTA 340CRR',
+          observaciones,
+          distribucion: `Inspección Técnica Arauco / Sub Gerencia Mantenimiento ${ptoTbjo}`,
+          copiaAsignada: 'Jefatura Departamento Corrosión 340CRR',
+          responsableId,
+          avisoNumero: `MES ${String(mes).padStart(2, '0')}/${anio}`,
+          ordenNumero: `${operacionesMes.length} OTs`,
+          ubicacionTecnica: `Planta Celulosa Puerto Esperanza - Sector ${ptoTbjo}`,
+          objetivo,
+          lugarObraTexto,
+          anexosTexto,
+          estado: 'En Curso',
+          fotos: {
+            create: fotosParaInformeMes
+          }
+        },
+        include: { fotos: true }
+      });
+    }
+  }
+
+  /**
    * Obtiene la planilla oficial del Programa Diario Semanal Arauco (formato PS442026)
    */
   public static async getProgramacion(req: Request, res: Response) {
@@ -311,28 +485,45 @@ export class ProgramacionAraucoController {
         total: disp.total > 0 ? Math.round((prog.total / disp.total) * 100) : 0
       };
 
-      // 4. Obtener Informe Semanal en curso asociado a este PS (ej: "PS442026 340CRR")
+      // 4. Obtener Informe Semanal en curso asociado a este PS (ej: "PS442026 340CRR") e Informe Mensual Consolidado
       const codigoPS = `PS${semana}${anio} ${ptoTbjo}`;
-      const informeSemanal = await prisma.informeCRR.findUnique({
-        where: { codigoInforme: codigoPS },
-        include: {
-          fotos: true,
-          responsable: {
-            select: { id: true, nombre: true, email: true }
+      const mesActual = dotacion.fechaInicio ? new Date(dotacion.fechaInicio).getUTCMonth() + 1 : 10;
+      const codigoMensual = `INF-MES-${String(mesActual).padStart(2, '0')}-${anio} ${ptoTbjo}`;
+
+      const [informeSemanal, informeMensual] = await Promise.all([
+        prisma.informeCRR.findUnique({
+          where: { codigoInforme: codigoPS },
+          include: {
+            fotos: true,
+            responsable: {
+              select: { id: true, nombre: true, email: true }
+            }
           }
-        }
-      });
+        }),
+        prisma.informeCRR.findUnique({
+          where: { codigoInforme: codigoMensual },
+          include: {
+            fotos: true,
+            responsable: {
+              select: { id: true, nombre: true, email: true }
+            }
+          }
+        })
+      ]);
 
       return res.json({
         semana,
         anio,
+        mes: mesActual,
         codigoPS,
+        codigoMensual,
         dotacion,
         operaciones,
         horasDisponibles: disp,
         horasProgramadas: prog,
         densidad,
         informeSemanal,
+        informeMensual,
         semanasDisponibles
       });
     } catch (error: any) {
@@ -543,18 +734,22 @@ export class ProgramacionAraucoController {
       const anio = opActualizada.anioProg || 2026;
       const ptoTbjo = opActualizada.ptoTbjo || '340CRR';
 
-      // Sincronizar automáticamente con el Informe de Trabajos de la Semana del PS en curso
-      const informeSemanal = await ProgramacionAraucoController.syncInformeSemanal(
-        semana,
-        anio,
-        ptoTbjo,
-        req.user?.id
-      );
+      // Sincronizar automáticamente con el Informe de Trabajos de la Semana y con el Informe Mensual Consolidado
+      const dot = await prisma.dotacionSemanalArauco.findUnique({
+        where: { semana_anio_ptoTbjo: { semana, anio, ptoTbjo } }
+      });
+      const mesOp = dot?.fechaInicio ? new Date(dot.fechaInicio).getUTCMonth() + 1 : new Date().getMonth() + 1;
+
+      const [informeSemanal, informeMensual] = await Promise.all([
+        ProgramacionAraucoController.syncInformeSemanal(semana, anio, ptoTbjo, req.user?.id),
+        ProgramacionAraucoController.syncInformeMensual(mesOp, anio, ptoTbjo, req.user?.id)
+      ]);
 
       return res.json({
-        message: `Evidencia guardada y unida al informe semanal PS${semana}${anio} ${ptoTbjo}`,
+        message: `Evidencia guardada y unida al Informe Semanal (PS${semana}${anio}) y al Informe Mensual (${String(mesOp).padStart(2, '0')}/${anio}).`,
         operacion: opActualizada,
-        informeSemanal
+        informeSemanal,
+        informeMensual
       });
     } catch (error: any) {
       console.error('Error al guardar evidencia de operación PS:', error);
@@ -566,20 +761,35 @@ export class ProgramacionAraucoController {
   }
 
   /**
-   * Genera o sincroniza bajo demanda el Informe Semanal del PS en curso
+   * Genera o sincroniza bajo demanda el Informe Semanal del PS en curso y el Informe Mensual
    */
   public static async syncInformeSemanalEndpoint(req: AuthenticatedRequest, res: Response) {
     try {
       const { semana = 44, anio = 2026, ptoTbjo = '340CRR' } = req.body;
-      const informe = await ProgramacionAraucoController.syncInformeSemanal(
-        Number(semana),
-        Number(anio),
-        String(ptoTbjo),
-        req.user?.id
-      );
+      const dot = await prisma.dotacionSemanalArauco.findUnique({
+        where: { semana_anio_ptoTbjo: { semana: Number(semana), anio: Number(anio), ptoTbjo: String(ptoTbjo) } }
+      });
+      const mes = dot?.fechaInicio ? new Date(dot.fechaInicio).getUTCMonth() + 1 : new Date().getMonth() + 1;
+
+      const [informe, informeMensual] = await Promise.all([
+        ProgramacionAraucoController.syncInformeSemanal(
+          Number(semana),
+          Number(anio),
+          String(ptoTbjo),
+          req.user?.id
+        ),
+        ProgramacionAraucoController.syncInformeMensual(
+          mes,
+          Number(anio),
+          String(ptoTbjo),
+          req.user?.id
+        )
+      ]);
+
       return res.json({
-        message: `Informe semanal PS${semana}${anio} ${ptoTbjo} actualizado y almacenado`,
-        informe
+        message: `Informe semanal PS${semana}${anio} e Informe Mensual ${String(mes).padStart(2, '0')}/${anio} actualizados y almacenados`,
+        informe,
+        informeMensual
       });
     } catch (error: any) {
       return res.status(500).json({
