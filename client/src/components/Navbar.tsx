@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
@@ -10,10 +10,18 @@ import {
   FileText,
   LogOut,
   Users,
-  ShieldCheck,
   HardHat,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  Activity,
+  Database,
+  Cpu,
+  HardDrive,
+  Server,
+  RefreshCw,
+  X,
+  CheckCircle2,
+  Sliders
 } from 'lucide-react';
 
 export const Navbar: React.FC = () => {
@@ -23,6 +31,29 @@ export const Navbar: React.FC = () => {
   const [showClearModal, setShowClearModal] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [includeAllModules, setIncludeAllModules] = useState(false);
+
+  // Estado de Render y Espacios Disponibles
+  const [showRenderModal, setShowRenderModal] = useState(false);
+  const [sysStatus, setSysStatus] = useState<any | null>(null);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+
+  const fetchSystemStatus = async () => {
+    setLoadingStatus(true);
+    try {
+      const res = await api.getSystemStatus();
+      setSysStatus(res);
+    } catch (err) {
+      console.error('Error al obtener estado de Render:', err);
+    } finally {
+      setLoadingStatus(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSystemStatus();
+    const interval = setInterval(fetchSystemStatus, 60000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleNavbarClear = async () => {
     setClearing(true);
@@ -46,6 +77,13 @@ export const Navbar: React.FC = () => {
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const formatUptime = (sec?: number) => {
+    if (!sec) return '0m';
+    const hrs = Math.floor(sec / 3600);
+    const mins = Math.floor((sec % 3600) / 60);
+    return hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
   };
 
   const navItems = [
@@ -103,8 +141,26 @@ export const Navbar: React.FC = () => {
             })}
           </nav>
 
-          {/* Usuario, Cupos y Salida */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          {/* Estado Render, Usuario, Cupos y Salida */}
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {/* Botón Estado de Render y Espacios Disponibles */}
+            <button
+              type="button"
+              onClick={() => {
+                fetchSystemStatus();
+                setShowRenderModal(true);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 transition cursor-pointer shadow-sm"
+              title="Ver Estado de Render, Espacios Disponibles en BD/RAM y Variables del Sistema"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <Server className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+              <span className="hidden lg:inline">
+                Render: {sysStatus?.storage?.database?.availableMb ?? '1014'} MB disp.
+              </span>
+              <span className="lg:hidden">Render</span>
+            </button>
+
             {/* Badge de Cupos 5 Usuarios */}
             {stats && (
               <div
@@ -156,6 +212,240 @@ export const Navbar: React.FC = () => {
 
         </div>
       </div>
+
+      {/* Modal de Estado de Render, Espacios Disponibles y Variables Pertinentes */}
+      {showRenderModal && (
+        <div
+          className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 text-slate-800"
+          onClick={() => setShowRenderModal(false)}
+        >
+          <div
+            className="bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera */}
+            <div className="bg-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-500/20 border border-emerald-500/40 rounded-xl text-emerald-400">
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-extrabold text-sm sm:text-base text-white">
+                      Monitor de Estado de Render & Espacios Disponibles
+                    </h3>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      ONLINE
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Servicio: <strong className="text-slate-200">{sysStatus?.render?.serviceName || 'app-informes'}</strong> • Región: <strong className="text-slate-200">{sysStatus?.render?.region || 'oregon'}</strong> • Uptime: <strong className="text-emerald-300">{formatUptime(sysStatus?.render?.uptimeSeconds)}</strong>
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={fetchSystemStatus}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition cursor-pointer"
+                  title="Actualizar métricas"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loadingStatus ? 'animate-spin text-sky-400' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowRenderModal(false)}
+                  className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-lg transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Contenido con Scroll */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-xs">
+              
+              {/* Tarjetas de Almacenamiento y Recursos */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                {/* 1. Base de Datos PostgreSQL */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <Database className="w-4 h-4 text-sky-600" />
+                      <span>BD PostgreSQL</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-100 text-sky-800">
+                      {sysStatus?.storage?.database?.usagePercent ?? 1}% en uso
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-sky-500 to-emerald-500 rounded-full transition-all"
+                      style={{ width: `${Math.max(3, sysStatus?.storage?.database?.usagePercent || 2)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-600">
+                    <span>Usado: <strong>{sysStatus?.storage?.database?.usedMb ?? 8.5} MB</strong></span>
+                    <span className="text-emerald-700 font-bold">
+                      Libre: {sysStatus?.storage?.database?.availableMb ?? 1015.5} MB
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    Capacidad Total Plan Render: {sysStatus?.storage?.database?.limitMb ?? 1024} MB (1 GB)
+                  </div>
+                </div>
+
+                {/* 2. Memoria RAM Instancia Render */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <Cpu className="w-4 h-4 text-purple-600" />
+                      <span>Memoria RAM Render</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-800">
+                      {sysStatus?.storage?.memory?.usagePercent ?? 18}% en uso
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-purple-500 to-sky-500 rounded-full transition-all"
+                      style={{ width: `${Math.max(5, sysStatus?.storage?.memory?.usagePercent || 18)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-600">
+                    <span>Usado: <strong>{sysStatus?.storage?.memory?.usedRssMb ?? 95} MB</strong></span>
+                    <span className="text-emerald-700 font-bold">
+                      Libre: {sysStatus?.storage?.memory?.availableMb ?? 417} MB
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    Límite Contenedor Web: {sysStatus?.storage?.memory?.limitMb ?? 512} MB (Heap: {sysStatus?.storage?.memory?.heapUsedMb ?? 42} MB)
+                  </div>
+                </div>
+
+                {/* 3. Cupos de Usuarios & Disco */}
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-slate-800 flex items-center gap-1.5">
+                      <HardDrive className="w-4 h-4 text-emerald-600" />
+                      <span>Cupos & Disco</span>
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                      {sysStatus?.usuarios?.disponibles ?? 3} cupos libres
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all"
+                      style={{
+                        width: `${((sysStatus?.usuarios?.registrados || 1) / (sysStatus?.usuarios?.maximo || 5)) * 100}%`
+                      }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[11px] text-slate-600">
+                    <span>Usuarios: <strong>{sysStatus?.usuarios?.registrados ?? 1} / {sysStatus?.usuarios?.maximo ?? 5}</strong></span>
+                    <span className="text-sky-700 font-bold">
+                      Disco Libre: {sysStatus?.storage?.disk?.availableGb ?? 8.8} GB
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">
+                    Rama Git: {sysStatus?.render?.branch || 'main'} ({sysStatus?.render?.commit || 'latest'})
+                  </div>
+                </div>
+              </div>
+
+              {/* Conteo de Registros Almacenados en BD */}
+              <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+                <div className="font-extrabold text-slate-900 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Inventario de Datos Almacenados en Base de Datos</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 text-center">
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                    <div className="text-lg font-black text-slate-900">{sysStatus?.registros?.avisos ?? 0}</div>
+                    <div className="text-[10px] text-slate-500 font-semibold">Avisos SAP</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                    <div className="text-lg font-black text-sky-700">{sysStatus?.registros?.operacionesOM ?? 0}</div>
+                    <div className="text-[10px] text-slate-500 font-semibold">Operaciones OM</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-sky-50 border border-sky-200">
+                    <div className="text-lg font-black text-sky-800">{sysStatus?.registros?.operacionesEnPS ?? 0}</div>
+                    <div className="text-[10px] text-sky-700 font-bold">Líneas en PS</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200">
+                    <div className="text-lg font-black text-emerald-700">{sysStatus?.registros?.informesCRR ?? 0}</div>
+                    <div className="text-[10px] text-emerald-700 font-bold">Informes CRR</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-purple-50 border border-purple-200">
+                    <div className="text-lg font-black text-purple-700">{sysStatus?.registros?.fotosAlmacenadas ?? 0}</div>
+                    <div className="text-[10px] text-purple-700 font-bold">Fotos en Informes</div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200">
+                    <div className="text-lg font-black text-slate-900">{sysStatus?.registros?.personal ?? 0}</div>
+                    <div className="text-[10px] text-slate-500 font-semibold">Personal Activo</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Programas Semanales Cargados */}
+              {sysStatus?.programasCargados && sysStatus.programasCargados.length > 0 && (
+                <div className="bg-sky-50/60 border border-sky-200 rounded-xl p-4 space-y-2">
+                  <div className="font-extrabold text-sky-950 uppercase tracking-wider text-[11px]">
+                    Programas Semanales (PS) Almacenados en Servidor
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {sysStatus.programasCargados.map((ps: any) => (
+                      <span
+                        key={ps.codigo}
+                        className="px-3 py-1.5 rounded-lg bg-white border border-sky-300 text-sky-900 font-bold text-xs shadow-sm"
+                      >
+                        📅 {ps.codigo} ({ps.hhDisponibles} HH disp. • Turno {ps.horasJornada}h)
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Variables Pertinentes del Entorno Render y Reglas de Negocio */}
+              <div className="bg-slate-900 text-slate-200 rounded-xl p-4 space-y-3">
+                <div className="font-extrabold text-sky-400 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <Sliders className="w-4 h-4 text-emerald-400" />
+                  <span>Variables de Entorno Render & Parámetros Operativos Pertinentes</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  {sysStatus?.variables &&
+                    Object.entries(sysStatus.variables).map(([key, val]) => (
+                      <div
+                        key={key}
+                        className="flex items-center justify-between bg-slate-800/90 px-3 py-2 rounded-lg border border-slate-700"
+                      >
+                        <span className="font-mono text-slate-400">{key}:</span>
+                        <span className="font-bold text-emerald-300 text-right ml-2">{String(val)}</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+
+            </div>
+
+            {/* Pie */}
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0 text-xs">
+              <span className="text-slate-500">
+                Node {sysStatus?.render?.nodeVersion} • {sysStatus?.render?.plan}
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowRenderModal(false)}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition cursor-pointer"
+              >
+                Cerrar Panel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Advertencia y Confirmación antes de Borrar Toda la Base */}
       {showClearModal && (

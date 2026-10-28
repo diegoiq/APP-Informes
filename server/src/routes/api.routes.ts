@@ -52,11 +52,13 @@ router.get('/programacion', PersonalController.getProgramacionSemanal);
 router.post('/programacion/asignacion', authMiddleware as any, PersonalController.guardarAsignacion as any);
 router.delete('/programacion/asignacion/:id', authMiddleware as any, PersonalController.eliminarAsignacion as any);
 
-// 5.1 PROGRAMA DIARIO SEMANAL OFICIAL ARAUCO (PS432026 / IW37N)
+// 5.1 PROGRAMA DIARIO SEMANAL OFICIAL ARAUCO (PS432026 / PS442026 / IW37N)
 router.get('/programacion/arauco', ProgramacionAraucoController.getProgramacion);
 router.post('/programacion/arauco/upload', upload.single('file'), ProgramacionAraucoController.uploadPSFile);
 router.post('/programacion/arauco/dotacion', authMiddleware as any, ProgramacionAraucoController.updateDotacion as any);
 router.post('/programacion/arauco/operacion', authMiddleware as any, ProgramacionAraucoController.saveOperacion as any);
+router.post('/programacion/arauco/operacion/:id/evidencia', authMiddleware as any, ProgramacionAraucoController.guardarEvidenciaOperacion as any);
+router.post('/programacion/arauco/sync-informe', authMiddleware as any, ProgramacionAraucoController.syncInformeSemanalEndpoint as any);
 router.delete('/programacion/arauco/operacion/:id', authMiddleware as any, ProgramacionAraucoController.removeOperacion as any);
 router.get('/operaciones/backlog', ProgramacionAraucoController.getBacklogOperaciones);
 
@@ -73,7 +75,8 @@ router.get('/informes/:id', InformesController.getById);
 router.get('/informes/:id/export-html', InformesController.exportHTML);
 router.post('/informes', authMiddleware as any, InformesController.create as any);
 
-// 8. ADMINISTRACIÓN Y LIMPIEZA
+// 8. ADMINISTRACIÓN, LIMPIEZA Y ESTADO DE RENDER / SISTEMA
+router.get('/system/status', AdminController.getSystemStatus);
 router.post('/admin/clean-demo', authMiddleware as any, AdminController.cleanDemoData as any);
 
 export default router;

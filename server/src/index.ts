@@ -11,6 +11,8 @@ import cors from 'cors';
 import bcrypt from 'bcryptjs';
 import prisma from './database/db';
 import router from './routes/api.routes';
+import { AraucoProgramParserService } from './services/araucoProgramParser.service';
+import { ProgramacionAraucoController } from './controllers/programacionArauco.controller';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -80,6 +82,29 @@ app.listen(PORT, async () => {
         }
       });
       console.log(`✅ Usuario ${email} creado con rol admin y clave Arauco2026`);
+    }
+
+    // Sincronizar automáticamente el archivo PS442026 340CRR.xlsm de la raíz solo si aún no está cargado o tenía el desfase previo
+    const ps44Path = path.resolve(__dirname, '../../PS442026 340CRR.xlsm');
+    if (fs.existsSync(ps44Path)) {
+      const existingDot44 = await prisma.dotacionSemanalArauco.findUnique({
+        where: { semana_anio_ptoTbjo: { semana: 44, anio: 2026, ptoTbjo: '340CRR' } }
+      });
+      const ops44Count = await prisma.operacionOM.count({
+        where: { semanaProg: 44, anioProg: 2026 }
+      });
+
+      // Solo importar desde disco si la semana 44 está vacía o si quedó con el desfase antiguo (opDomingo === 9 o opMartes === 0)
+      if (!existingDot44 || ops44Count === 0 || existingDot44.opDomingo === 9 || existingDot44.opMartes === 0) {
+        const buffer = fs.readFileSync(ps44Path);
+        const summary = await AraucoProgramParserService.processProgramFile(buffer, 'PS442026 340CRR.xlsm');
+        await ProgramacionAraucoController.syncInformeSemanal(summary.semana, summary.anio, summary.ptoTbjo);
+        console.log(
+          `✅ PS442026 340CRR inicializado en BD (${summary.totalOperaciones} operaciones | ${summary.hhDisponibles} HH disp | ${summary.hhProgramadas} HH prog)`
+        );
+      } else {
+        console.log(`✅ PS442026 340CRR ya persistido en BD (${ops44Count} operaciones activas).`);
+      }
     }
   } catch (err: any) {
     console.error('Info inicialización usuario:', err.message);

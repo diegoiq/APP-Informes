@@ -14,10 +14,35 @@ export interface AraucoProgramSummary {
   densidad: number;
 }
 
+function unwrapCellValue(cell: ExcelJS.Cell | undefined): any {
+  if (!cell) return undefined;
+  if (cell.result !== undefined && cell.result !== null) return cell.result;
+  const val: any = cell.value;
+  if (val && typeof val === 'object') {
+    if ('result' in val && val.result !== undefined) return val.result;
+    if ('text' in val && val.text !== undefined) return val.text;
+    if ('formula' in val || 'sharedFormula' in val) return 0; // Fórmula apuntando a celda vacía en Excel
+  }
+  return val;
+}
+
+function parseCellNumber(cell: ExcelJS.Cell | undefined, defaultVal: number = 0): number {
+  const raw = unwrapCellValue(cell);
+  if (raw === undefined || raw === null || String(raw).trim() === '') return defaultVal;
+  const n = Number(raw);
+  return isNaN(n) ? defaultVal : n;
+}
+
+function parseCellString(cell: ExcelJS.Cell | undefined, defaultVal: string = ''): string {
+  const raw = unwrapCellValue(cell);
+  if (raw === undefined || raw === null) return defaultVal;
+  return String(raw).trim() || defaultVal;
+}
+
 export class AraucoProgramParserService {
   /**
-   * Procesa el archivo estándar de programación semanal de Arauco (ej: PS432026 340CRR.xlsm)
-   * Lee la hoja ProDiaSem y HojaPegado / Export
+   * Procesa el archivo estándar de programación semanal de Arauco (ej: PS442026 340CRR.xlsm)
+   * Lee las hojas ProDiaSem, HojaPegado y Export
    */
   public static async processProgramFile(
     fileBuffer: Buffer,
@@ -27,7 +52,7 @@ export class AraucoProgramParserService {
     // @ts-ignore exceljs accepts buffer
     await workbook.xlsx.load(fileBuffer);
 
-    // 1. Identificar hojas
+    // 1. Identificar hojas oficiales
     const ws =
       workbook.getWorksheet('ProDiaSem') ||
       workbook.worksheets.find(w => w.name.toLowerCase().includes('prodia') || w.name.toLowerCase().includes('programa')) ||
@@ -35,54 +60,63 @@ export class AraucoProgramParserService {
 
     const wsPegado =
       workbook.getWorksheet('HojaPegado') ||
-      workbook.getWorksheet('Export') ||
-      workbook.worksheets.find(w => w.name.toLowerCase().includes('pegado') || w.name.toLowerCase().includes('export')) ||
+      workbook.worksheets.find(w => w.name.toLowerCase().includes('pegado')) ||
       workbook.getWorksheet(2);
+
+    const wsExport =
+      workbook.getWorksheet('Export') ||
+      workbook.worksheets.find(w => w.name.toLowerCase().includes('export'));
 
     if (!ws) {
       throw new Error("No se encontró la hoja 'ProDiaSem' en el archivo del programa semanal.");
     }
 
     // 2. Extraer metadatos de cabecera
-    const ptoTbjo = String(ws.getCell('D3').result || ws.getCell('D3').value || '340CRR').trim();
-    const grupoPlanif = String(ws.getCell('D4').result || ws.getCell('D4').value || 'TA1').trim();
+    const ptoTbjo =
+      parseCellString(ws.getCell('D3')) ||
+      parseCellString(wsPegado?.getCell('E1')) ||
+      parseCellString(wsExport?.getCell('E1')) ||
+      '340CRR';
+
+    const grupoPlanif =
+      parseCellString(ws.getCell('D4')) ||
+      parseCellString(wsPegado?.getCell('E2')) ||
+      parseCellString(wsExport?.getCell('E2')) ||
+      'TA1';
 
     // Fechas (Desde / Hasta)
-    let fechaInicio: Date | null = null;
-    let fechaFin: Date | null = null;
+    const parseExcelDate = (cell: ExcelJS.Cell | undefined): Date | null => {
+      const raw = unwrapCellValue(cell);
+      if (!raw) return null;
+      if (raw instanceof Date && !isNaN(raw.getTime())) return raw;
+      if (typeof raw === 'number') {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        return new Date(excelEpoch.getTime() + raw * 86400000);
+      }
+      const d = new Date(String(raw));
+      return isNaN(d.getTime()) ? null : d;
+    };
 
-    const desdeVal = ws.getCell('C7').result || ws.getCell('C7').value;
-    const hastaVal = ws.getCell('C8').result || ws.getCell('C8').value;
+    let fechaInicio =
+      parseExcelDate(ws.getCell('C7')) ||
+      parseExcelDate(wsExport?.getCell('C3')) ||
+      parseExcelDate(wsPegado?.getCell('C3'));
 
-    if (desdeVal instanceof Date && !isNaN(desdeVal.getTime())) {
-      fechaInicio = desdeVal;
-    } else if (typeof desdeVal === 'number') {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      fechaInicio = new Date(excelEpoch.getTime() + desdeVal * 86400000);
-    } else if (desdeVal) {
-      fechaInicio = new Date(String(desdeVal));
-    }
+    let fechaFin =
+      parseExcelDate(ws.getCell('C8')) ||
+      parseExcelDate(wsExport?.getCell('C4')) ||
+      parseExcelDate(wsPegado?.getCell('C4'));
 
-    if (hastaVal instanceof Date && !isNaN(hastaVal.getTime())) {
-      fechaFin = hastaVal;
-    } else if (typeof hastaVal === 'number') {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      fechaFin = new Date(excelEpoch.getTime() + hastaVal * 86400000);
-    } else if (hastaVal) {
-      fechaFin = new Date(String(hastaVal));
-    }
-
-    // Deducir semana y año desde el nombre de archivo (ej: PS432026...) o de las fechas
-    let semana = 43;
+    // Deducir semana y año desde el nombre de archivo (ej: PS442026...) o de las fechas
+    let semana = 44;
     let anio = 2026;
 
-    const matchName = filename.match(/PS(\d{2})(\d{4})/i);
+    const matchName = filename.match(/PS\s*(\d{1,2})\s*(\d{4})/i);
     if (matchName) {
       semana = parseInt(matchName[1], 10);
       anio = parseInt(matchName[2], 10);
     } else if (fechaInicio && !isNaN(fechaInicio.getTime())) {
-      // Cálculo aproximado de semana ISO
-      const d = new Date(Date.UTC(fechaInicio.getFullYear(), fechaInicio.getMonth(), fechaInicio.getDate()));
+      const d = new Date(Date.UTC(fechaInicio.getUTCFullYear(), fechaInicio.getUTCMonth(), fechaInicio.getUTCDate()));
       const dayNum = d.getUTCDay() || 7;
       d.setUTCDate(d.getUTCDate() + 4 - dayNum);
       const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
@@ -91,28 +125,56 @@ export class AraucoProgramParserService {
     }
 
     if (!fechaInicio) {
-      fechaInicio = new Date(anio, 9, 21); // Default Mié 21-Oct-2026
+      fechaInicio = new Date(Date.UTC(anio, 9, 28)); // Default Mié 28-Oct-2026
     }
     if (!fechaFin) {
       fechaFin = new Date(fechaInicio.getTime() + 6 * 86400000); // 7 días (Mi a Ma)
     }
 
     // 3. Extraer dotación de operarios por día
-    const parseOp = (cell: any, defaultVal: number): number => {
-      if (!cell) return defaultVal;
-      const v = cell.result !== undefined ? cell.result : cell.value;
-      const n = Number(v);
-      return isNaN(n) ? defaultVal : n;
+    // En HojaPegado y Export: Fila 1 tiene las cabeceras H1="Mi", I1="Ju", J1="Vi", K1="Sa", L1="Do", M1="Lu", N1="Ma"
+    // y Fila 2 (H2:N2) tiene la "Cantidad de operarios disponibles".
+    const horasJornada = 7; // 7 hs corridas normales
+
+    const readOperariosDia = (colPegadoExport: string, colProDiaSem: string): number => {
+      // 1) Intentar desde hoja Export (valores directos numéricos en H2:N2)
+      if (wsExport) {
+        const rawExp = unwrapCellValue(wsExport.getCell(`${colPegadoExport}2`));
+        if (rawExp !== undefined && rawExp !== null && String(rawExp).trim() !== '') {
+          const n = Number(rawExp);
+          if (!isNaN(n)) return n;
+        }
+      }
+      // 2) Intentar desde HojaPegado (fórmulas =Export!H2..N2 en H2:N2)
+      if (wsPegado) {
+        const rawPeg = unwrapCellValue(wsPegado.getCell(`${colPegadoExport}2`));
+        if (rawPeg !== undefined && rawPeg !== null && String(rawPeg).trim() !== '') {
+          const n = Number(rawPeg);
+          if (!isNaN(n)) return n;
+        }
+        // Fallback a fila 3 de HojaPegado (HH disponibles = operarios * 7)
+        const rawHH = unwrapCellValue(wsPegado.getCell(`${colPegadoExport}3`));
+        if (rawHH !== undefined && rawHH !== null && String(rawHH).trim() !== '') {
+          const hh = Number(rawHH);
+          if (!isNaN(hh) && hh >= 0) return Math.round(hh / horasJornada);
+        }
+      }
+      // 3) Fallback a fila 10 de ProDiaSem (G10:M10)
+      const rawProDia = unwrapCellValue(ws.getCell(`${colProDiaSem}10`));
+      if (rawProDia !== undefined && rawProDia !== null && String(rawProDia).trim() !== '') {
+        const hh = Number(rawProDia);
+        if (!isNaN(hh) && hh >= 0) return Math.round(hh / horasJornada);
+      }
+      return 0;
     };
 
-    const opMiercoles = wsPegado ? parseOp(wsPegado.getCell('I2'), 7) : 7;
-    const opJueves = wsPegado ? parseOp(wsPegado.getCell('J2'), 8) : 8;
-    const opViernes = wsPegado ? parseOp(wsPegado.getCell('K2'), 8) : 8;
-    const opSabado = wsPegado ? parseOp(wsPegado.getCell('L2'), 0) : 0;
-    const opDomingo = wsPegado ? parseOp(wsPegado.getCell('M2'), 0) : 0;
-    const opLunes = wsPegado ? parseOp(wsPegado.getCell('N2'), 7) : 7;
-    const opMartes = wsPegado ? parseOp(wsPegado.getCell('O2'), 8) : 8;
-    const horasJornada = 7; // 7 hs normales
+    const opMiercoles = readOperariosDia('H', 'G');
+    const opJueves = readOperariosDia('I', 'H');
+    const opViernes = readOperariosDia('J', 'I');
+    const opSabado = readOperariosDia('K', 'J');
+    const opDomingo = readOperariosDia('L', 'K');
+    const opLunes = readOperariosDia('M', 'L');
+    const opMartes = readOperariosDia('N', 'M');
 
     // Guardar / actualizar dotación semanal en BD
     await prisma.dotacionSemanalArauco.upsert({
@@ -154,54 +216,107 @@ export class AraucoProgramParserService {
       }
     });
 
-    // 4. Extraer operaciones programadas (fila 14 en adelante)
-    const operacionesExtraidas: any[] = [];
+    // 4. Extraer operaciones programadas (fila 14 en adelante en ProDiaSem)
+    const operacionesMap = new Map<string, any>();
     let hhTotalProgramadas = 0;
 
     for (let r = 14; r <= ws.rowCount; r++) {
-      const ordenVal = ws.getCell(`B${r}`).value;
-      if (!ordenVal || String(ordenVal).trim() === '') break; // Fin de operaciones
+      const ordenStr = parseCellString(ws.getCell(`B${r}`));
+      const descStr = parseCellString(ws.getCell(`E${r}`));
 
-      const numeroOrden = String(ordenVal).trim();
-      const numeroOperacion = String(ws.getCell(`C${r}`).value || '0010').trim();
-      const ubicacionTecnica = String(ws.getCell(`D${r}`).value || '').trim() || undefined;
-      const textoOperacion = String(ws.getCell(`E${r}`).value || 'Operación sin texto').trim();
+      if (!ordenStr || ordenStr.toLowerCase().includes('total')) {
+        if (descStr.toLowerCase().includes('total hh disponibles')) break;
+        if (!ordenStr) break;
+      }
 
-      const mi = Number(ws.getCell(`G${r}`).value) || 0;
-      const ju = Number(ws.getCell(`H${r}`).value) || 0;
-      const vi = Number(ws.getCell(`I${r}`).value) || 0;
-      const sa = Number(ws.getCell(`J${r}`).value) || 0;
-      const dom = Number(ws.getCell(`K${r}`).value) || 0;
-      const lu = Number(ws.getCell(`L${r}`).value) || 0;
-      const ma = Number(ws.getCell(`M${r}`).value) || 0;
+      const numeroOrden = ordenStr;
+      const numeroOperacion = parseCellString(ws.getCell(`C${r}`), '0010').padStart(4, '0');
+      const ubicacionTecnica = parseCellString(ws.getCell(`D${r}`)) || undefined;
+      const textoOperacion = descStr || 'Operación sin texto';
+
+      const mi = parseCellNumber(ws.getCell(`G${r}`), 0);
+      const ju = parseCellNumber(ws.getCell(`H${r}`), 0);
+      const vi = parseCellNumber(ws.getCell(`I${r}`), 0);
+      const sa = parseCellNumber(ws.getCell(`J${r}`), 0);
+      const dom = parseCellNumber(ws.getCell(`K${r}`), 0);
+      const lu = parseCellNumber(ws.getCell(`L${r}`), 0);
+      const ma = parseCellNumber(ws.getCell(`M${r}`), 0);
       const totalFila = mi + ju + vi + sa + dom + lu + ma;
 
       hhTotalProgramadas += totalFila;
 
-      operacionesExtraidas.push({
-        numeroOrden,
-        numeroOperacion,
-        ubicacionTecnica,
-        textoOperacion,
+      const key = `${numeroOrden}__${numeroOperacion}`;
+      const existing = operacionesMap.get(key);
+      if (existing) {
+        existing.hhMiercoles += mi;
+        existing.hhJueves += ju;
+        existing.hhViernes += vi;
+        existing.hhSabado += sa;
+        existing.hhDomingo += dom;
+        existing.hhLunes += lu;
+        existing.hhMartes += ma;
+        existing.hhTotalProgramado += totalFila;
+        existing.horasEstimadas += totalFila;
+      } else {
+        operacionesMap.set(key, {
+          numeroOrden,
+          numeroOperacion,
+          ubicacionTecnica,
+          textoOperacion,
+          semanaProg: semana,
+          anioProg: anio,
+          ptoTbjo,
+          revision: `PS${semana}${anio}`,
+          hhMiercoles: mi,
+          hhJueves: ju,
+          hhViernes: vi,
+          hhSabado: sa,
+          hhDomingo: dom,
+          hhLunes: lu,
+          hhMartes: ma,
+          hhTotalProgramado: totalFila,
+          horasEstimadas: totalFila
+        });
+      }
+    }
+
+    const operacionesExtraidas = Array.from(operacionesMap.values());
+
+    // 4.1 Desasignar operaciones previas de esta misma semana que ya no estén en el archivo Excel subido
+    const keysNuevas = new Set(operacionesExtraidas.map(o => `${o.numeroOrden}__${o.numeroOperacion}`));
+    const opsPreviasSemana = await prisma.operacionOM.findMany({
+      where: {
         semanaProg: semana,
         anioProg: anio,
-        ptoTbjo,
-        revision: `PS${semana}${anio}`,
-        hhMiercoles: mi,
-        hhJueves: ju,
-        hhViernes: vi,
-        hhSabado: sa,
-        hhDomingo: dom,
-        hhLunes: lu,
-        hhMartes: ma,
-        hhTotalProgramado: totalFila,
-        horasEstimadas: totalFila
+        ptoTbjo
+      },
+      select: { id: true, numeroOrden: true, numeroOperacion: true }
+    });
+
+    const idsParaQuitarDeSemana = opsPreviasSemana
+      .filter(p => !keysNuevas.has(`${p.numeroOrden}__${p.numeroOperacion}`))
+      .map(p => p.id);
+
+    if (idsParaQuitarDeSemana.length > 0) {
+      await prisma.operacionOM.updateMany({
+        where: { id: { in: idsParaQuitarDeSemana } },
+        data: {
+          semanaProg: null,
+          anioProg: null,
+          hhMiercoles: 0,
+          hhJueves: 0,
+          hhViernes: 0,
+          hhSabado: 0,
+          hhDomingo: 0,
+          hhLunes: 0,
+          hhMartes: 0,
+          hhTotalProgramado: 0
+        }
       });
     }
 
-    // 5. Guardar operaciones en la base de datos
+    // 5. Guardar operaciones en la base de datos (preservando comentariosEjecucion y fotosEjecucion existentes)
     for (const op of operacionesExtraidas) {
-      // Buscar aviso relacionado si existe por orden
       const avisoRelacionado = await prisma.aviso.findFirst({
         where: { numeroOrden: op.numeroOrden },
         select: { id: true }
@@ -229,7 +344,7 @@ export class AraucoProgramParserService {
           hhLunes: op.hhLunes,
           hhMartes: op.hhMartes,
           hhTotalProgramado: op.hhTotalProgramado,
-          avisoId: avisoRelacionado?.id
+          ...(avisoRelacionado?.id ? { avisoId: avisoRelacionado.id } : {})
         },
         create: {
           numeroOrden: op.numeroOrden,

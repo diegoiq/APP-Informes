@@ -239,6 +239,27 @@ class ApiService {
     });
   }
 
+  public guardarEvidenciaOperacionArauco(
+    id: string,
+    data: { estadoEjecucion: string; comentariosEjecucion: string; fotosEjecucion: any[] }
+  ) {
+    return this.request(`/programacion/arauco/operacion/${id}/evidencia`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public syncInformeSemanalArauco(semana: number, anio: number, ptoTbjo: string = '340CRR') {
+    return this.request('/programacion/arauco/sync-informe', {
+      method: 'POST',
+      body: JSON.stringify({ semana, anio, ptoTbjo })
+    });
+  }
+
+  public getSystemStatus() {
+    return this.request('/system/status');
+  }
+
   public removeOperacionArauco(id: string) {
     return this.request(`/programacion/arauco/operacion/${id}`, {
       method: 'DELETE'

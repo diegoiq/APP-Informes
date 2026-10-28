@@ -117,6 +117,13 @@ model OperacionOM {
   hhLunes           Float    @default(0) @map("hh_lunes")
   hhMartes          Float    @default(0) @map("hh_martes")
   hhTotalProgramado Float    @default(0) @map("hh_total_programado")
+
+  // Evidencia de ejecución por línea del PS (fotos y comentarios que se unen al Informe Semanal)
+  estadoEjecucion      String?   @default("Pendiente") @map("estado_ejecucion") // Pendiente, En Ejecución, Completado, Observado
+  comentariosEjecucion String?   @map("comentarios_ejecucion")
+  fotosEjecucion       String?   @map("fotos_ejecucion") // JSON array de { url, etapa, comentario, fecha }
+  fechaEjecucion       DateTime? @map("fecha_ejecucion")
+
   activo            Boolean  @default(true) @map("activo")
 
   creadoEn          DateTime @default(now()) @map("creado_en")
