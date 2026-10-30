@@ -26,7 +26,8 @@ import {
   Server,
   Download,
   FileSpreadsheet,
-  AlertTriangle
+  AlertTriangle,
+  Terminal
 } from 'lucide-react';
 
 const DIAS = [
@@ -68,6 +69,8 @@ export const ProgramacionSemanal: React.FC = () => {
   const [syncingInforme, setSyncingInforme] = useState(false);
   const [showDeleteDocModal, setShowDeleteDocModal] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState(false);
+  const [uploadDebugLogs, setUploadDebugLogs] = useState<string[] | null>(null);
+  const [showDebugModal, setShowDebugModal] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const formatBytes = (bytes?: number) => {
@@ -163,11 +166,22 @@ export const ProgramacionSemanal: React.FC = () => {
       const targetSem = res.summary?.semana || semana;
       const targetAn = res.summary?.anio || anio;
       const opsCount = res.summary?.totalOperaciones ?? 0;
+      const opsGuardadas = res.summary?.operacionesGuardadasOk ?? opsCount;
+      const opsErr = res.summary?.operacionesGuardadasErr ?? 0;
       const hhCount = res.summary?.hhProgramadas ?? 0;
 
+      if (res.summary?.debugLogs && Array.isArray(res.summary.debugLogs)) {
+        setUploadDebugLogs(res.summary.debugLogs);
+      }
+
       setUploadSuccess(
-        `Documento "${file.name}" cargado con éxito en PS${targetSem}${targetAn} (${opsCount} operaciones | ${hhCount} HH programadas).`
+        `Documento "${file.name}" importado en PS${targetSem}${targetAn}: ${opsCount} operaciones detectadas (${opsGuardadas} guardadas en BD | ${hhCount} HH).`
       );
+
+      // Si se detectaron 0 operaciones o hubo errores de guardado, abrir diagnóstico automáticamente
+      if (opsCount === 0 || opsErr > 0) {
+        setShowDebugModal(true);
+      }
 
       if (targetSem !== semana || targetAn !== anio) {
         setSemana(targetSem);
@@ -175,7 +189,7 @@ export const ProgramacionSemanal: React.FC = () => {
       } else {
         await loadProgramacion();
       }
-      setTimeout(() => setUploadSuccess(null), 10000);
+      setTimeout(() => setUploadSuccess(null), 12000);
     } catch (err: any) {
       console.error('Error al subir PS:', err);
       const msg = err.response?.data?.message || err.message || 'Error al importar archivo de programación';
@@ -1320,9 +1334,32 @@ export const ProgramacionSemanal: React.FC = () => {
                             </button>
                           </div>
                           {data?.dotacion?.archivoNombre && (
-                            <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-100/70 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-                              <span>Archivo cargado: <strong>{data.dotacion.archivoNombre}</strong> (0 operaciones detectadas). Puedes volver a cargarlo arriba.</span>
+                            <div className="mt-3 flex flex-col items-center gap-2">
+                              <div className="text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-300 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 shadow-sm">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>Archivo oficial guardado en servidor: <strong>{data.dotacion.archivoNombre}</strong>.</span>
+                              </div>
+                              <div className="flex items-center gap-3 text-xs">
+                                <button
+                                  type="button"
+                                  onClick={triggerFileInput}
+                                  className="text-sky-700 hover:text-sky-900 font-bold underline cursor-pointer"
+                                >
+                                  Volver a cargar archivo
+                                </button>
+                                {uploadDebugLogs && uploadDebugLogs.length > 0 && (
+                                  <>
+                                    <span className="text-slate-300">•</span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowDebugModal(true)}
+                                      className="text-amber-700 hover:text-amber-900 font-bold underline cursor-pointer flex items-center gap-1"
+                                    >
+                                      🔍 Ver diagnóstico de importación ({uploadDebugLogs.length} puntos)
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           )}
                         </>
@@ -1848,6 +1885,73 @@ export const ProgramacionSemanal: React.FC = () => {
                 className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
               >
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Diagnóstico Técnico de Importación */}
+      {showDebugModal && uploadDebugLogs && (
+        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-6 space-y-4 border border-slate-200 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 bg-amber-100 text-amber-800 rounded-xl">
+                  <Terminal className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base">
+                    Diagnóstico Técnico de Importación PS
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Traza paso a paso del procesamiento en el servidor
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDebugModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-950 text-emerald-400 font-mono text-xs p-4 rounded-xl max-h-96 overflow-y-auto space-y-1.5 shadow-inner border border-slate-800 select-text">
+              {uploadDebugLogs.map((log, index) => {
+                const isError = log.includes('error') || log.includes('Error') || log.includes('0 operaciones');
+                const isWarning = log.includes('respaldo') || log.includes('Fin de tabla');
+                return (
+                  <div
+                    key={index}
+                    className={`leading-relaxed ${
+                      isError ? 'text-red-400 font-semibold' : isWarning ? 'text-amber-300' : 'text-emerald-400'
+                    }`}
+                  >
+                    {log}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(uploadDebugLogs.join('\n'));
+                  alert('Traza de diagnóstico copiada al portapapeles');
+                }}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer flex items-center gap-1.5"
+              >
+                📋 Copiar Traza
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowDebugModal(false)}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                Cerrar
               </button>
             </div>
           </div>

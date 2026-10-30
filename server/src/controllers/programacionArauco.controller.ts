@@ -180,7 +180,15 @@ export class ProgramacionAraucoController {
       where: {
         semanaProg: semana,
         anioProg: anio,
-        ...(ptoTbjo ? { ptoTbjo: { contains: ptoTbjo } } : {})
+        ...(ptoTbjo
+          ? {
+              OR: [
+                { ptoTbjo: { contains: ptoTbjo, mode: 'insensitive' } },
+                { ptoTbjo: null },
+                { ptoTbjo: '' }
+              ]
+            }
+          : {})
       },
       orderBy: [{ numeroOrden: 'asc' }, { numeroOperacion: 'asc' }]
     });
@@ -397,7 +405,15 @@ export class ProgramacionAraucoController {
       where: {
         anioProg: anio,
         ...(semanasDelMes.length > 0 ? { semanaProg: { in: semanasDelMes } } : { semanaProg: { not: null } }),
-        ...(ptoTbjo ? { ptoTbjo: { contains: ptoTbjo } } : {})
+        ...(ptoTbjo
+          ? {
+              OR: [
+                { ptoTbjo: { contains: ptoTbjo, mode: 'insensitive' } },
+                { ptoTbjo: null },
+                { ptoTbjo: '' }
+              ]
+            }
+          : {})
       },
       orderBy: [{ semanaProg: 'asc' }, { numeroOrden: 'asc' }, { numeroOperacion: 'asc' }]
     });
@@ -604,7 +620,15 @@ export class ProgramacionAraucoController {
         where: {
           semanaProg: semana,
           anioProg: anio,
-          ...(ptoTbjo ? { ptoTbjo: { contains: ptoTbjo } } : {})
+          ...(ptoTbjo
+            ? {
+                OR: [
+                  { ptoTbjo: { contains: ptoTbjo, mode: 'insensitive' } },
+                  { ptoTbjo: null },
+                  { ptoTbjo: '' }
+                ]
+              }
+            : {})
         },
         orderBy: [
           { numeroOrden: 'asc' },
@@ -1072,7 +1096,7 @@ export class ProgramacionAraucoController {
       }
 
       return res.json({
-        message: 'Programa semanal Arauco importado con éxito',
+        message: `Programa semanal Arauco importado con éxito: ${summary.totalOperaciones} operaciones procesadas (${summary.operacionesGuardadasOk ?? summary.totalOperaciones} guardadas en BD).`,
         summary,
         informeSemanal,
         informeMensual

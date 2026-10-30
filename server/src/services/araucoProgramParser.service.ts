@@ -9,12 +9,16 @@ export interface AraucoProgramSummary {
   fechaInicio: string;
   fechaFin: string;
   totalOperaciones: number;
+  operacionesGuardadasOk?: number;
+  operacionesGuardadasErr?: number;
+  totalEnBd?: number;
   hhDisponibles: number;
   hhProgramadas: number;
   densidad: number;
   archivoNombre?: string;
   archivoTamano?: number;
   archivoFecha?: string;
+  debugLogs?: string[];
 }
 
 function unwrapCellValue(cell: ExcelJS.Cell | undefined): any {
@@ -54,28 +58,36 @@ export class AraucoProgramParserService {
     targetAnio?: number,
     mimeType?: string
   ): Promise<AraucoProgramSummary> {
+    const debugLogs: string[] = [];
+    debugLogs.push(`[1] Archivo recibido: "${filename}" (${fileBuffer.length} bytes)`);
+
     const workbook = new ExcelJS.Workbook();
     // @ts-ignore exceljs accepts buffer
     await workbook.xlsx.load(fileBuffer);
 
-    // 1. Identificar hojas oficiales
+    debugLogs.push(`[2] Hojas encontradas: ${workbook.worksheets.map((w, idx) => `[${idx}] "${w.name}" (id:${w.id}, filas:${w.rowCount})`).join(', ')}`);
+
+    // 1. Identificar hojas oficiales (búsqueda insensible a mayúsculas/minúsculas y espacios)
     const ws =
+      workbook.worksheets.find(w => w.name.trim().toLowerCase().startsWith('prodia')) ||
+      workbook.worksheets.find(w => w.name.trim().toLowerCase().includes('programa')) ||
       workbook.getWorksheet('ProDiaSem') ||
-      workbook.worksheets.find(w => w.name.toLowerCase().includes('prodia') || w.name.toLowerCase().includes('programa')) ||
-      workbook.getWorksheet(1);
+      workbook.worksheets[0];
 
     const wsPegado =
+      workbook.worksheets.find(w => w.name.trim().toLowerCase().includes('pegado')) ||
       workbook.getWorksheet('HojaPegado') ||
-      workbook.worksheets.find(w => w.name.toLowerCase().includes('pegado')) ||
-      workbook.getWorksheet(2);
+      workbook.worksheets[1];
 
     const wsExport =
+      workbook.worksheets.find(w => w.name.trim().toLowerCase().includes('export')) ||
       workbook.getWorksheet('Export') ||
-      workbook.worksheets.find(w => w.name.toLowerCase().includes('export'));
+      workbook.worksheets[2];
 
     if (!ws) {
-      throw new Error("No se encontró la hoja 'ProDiaSem' en el archivo del programa semanal.");
+      throw new Error("No se encontró la hoja 'ProDiaSem' ni ninguna hoja de programa en el archivo.");
     }
+    debugLogs.push(`[3] Hojas asignadas -> ProDiaSem: "${ws.name}", HojaPegado: "${wsPegado?.name || 'N/A'}", Export: "${wsExport?.name || 'N/A'}"`);
 
     // 2. Extraer metadatos de cabecera
     const ptoTbjo =
@@ -269,12 +281,14 @@ export class AraucoProgramParserService {
       }
     }
     if (headerRow === -1) headerRow = 13; // Fallback oficial fila 13
+    debugLogs.push(`[4] Cabecera de operaciones en hoja "${ws.name}": detectada en fila ${headerRow}`);
 
     const operacionesMap = new Map<string, any>();
     let hhTotalProgramadas = 0;
     let emptyStreak = 0;
 
-    for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+    const maxR = Math.max(ws.rowCount || 0, ws.actualRowCount || 0, 100);
+    for (let r = headerRow + 1; r <= maxR; r++) {
       const ordenStr = parseCellString(ws.getCell(`B${r}`));
       const descStr = parseCellString(ws.getCell(`E${r}`));
       const lowerOrden = ordenStr.toLowerCase();
@@ -292,6 +306,7 @@ export class AraucoProgramParserService {
         lowerDesc.startsWith('total general') ||
         lowerDesc.startsWith('total programad')
       ) {
+        debugLogs.push(`[4.1] Fin de tabla de operaciones en fila ${r} por texto de total: "${ordenStr || descStr}"`);
         break;
       }
 
@@ -304,7 +319,6 @@ export class AraucoProgramParserService {
       emptyStreak = 0;
 
       // Una OT de Arauco debe contener obligatoriamente dígitos numéricos (ej: 7996176, 8067539).
-      // Se descarta cualquier fila que no sea una orden (como "Opción: Duración/Horas Hombres", fórmulas, textos de cabecera)
       const matchDigits = ordenStr.match(/\d{5,12}/);
       if (!matchDigits) {
         continue;
@@ -363,6 +377,52 @@ export class AraucoProgramParserService {
       }
     }
 
+    debugLogs.push(`[5] Operaciones extraídas desde hoja "${ws.name}": ${operacionesMap.size} líneas (${hhTotalProgramadas} HH)`);
+
+    // Respaldo de seguridad: si ProDiaSem arrojó 0 operaciones, extraer desde hoja "Export" o "HojaPegado"
+    if (operacionesMap.size === 0 && wsExport) {
+      debugLogs.push(`[5.1] Intentando extracción de respaldo desde hoja "Export" (filas:${wsExport.rowCount})`);
+      const maxExpR = Math.max(wsExport.rowCount || 0, wsExport.actualRowCount || 0, 50);
+      for (let r = 8; r <= maxExpR; r++) {
+        const otVal = parseCellString(wsExport.getCell(`E${r}`)); // Col 5: Orig.nec.
+        const matchOT = otVal.match(/\d{5,12}/);
+        if (!matchOT) continue;
+
+        const numeroOrden = matchOT[0];
+        const opVal = parseCellString(wsExport.getCell(`Q${r}`)); // Col 17: Operación
+        const matchOp = opVal.match(/\d+/);
+        const numeroOperacion = matchOp ? matchOp[0].padStart(4, '0') : (opVal || '0010');
+        const ubicacionTecnica = parseCellString(wsExport.getCell(`P${r}`)) || '340CRR'; // Col 16: Ubic.técn.
+        const textoOperacion = parseCellString(wsExport.getCell(`R${r}`)) || parseCellString(wsExport.getCell(`O${r}`)) || 'Operación sin texto'; // Col 18 / 15
+        const hhTotal = parseCellNumber(wsExport.getCell(`L${r}`), 0); // Col 12: Trabajo HH
+
+        const key = `${numeroOrden}__${numeroOperacion}`;
+        if (!operacionesMap.has(key)) {
+          operacionesMap.set(key, {
+            numeroOrden,
+            numeroOperacion,
+            ubicacionTecnica,
+            textoOperacion,
+            semanaProg: semana,
+            anioProg: anio,
+            ptoTbjo,
+            revision: `PS${semana}${anio}`,
+            hhMiercoles: 0,
+            hhJueves: 0,
+            hhViernes: 0,
+            hhSabado: 0,
+            hhDomingo: 0,
+            hhLunes: 0,
+            hhMartes: 0,
+            hhTotalProgramado: hhTotal,
+            horasEstimadas: hhTotal
+          });
+          hhTotalProgramadas += hhTotal;
+        }
+      }
+      debugLogs.push(`[5.2] Extracción de respaldo completada: ${operacionesMap.size} operaciones recuperadas (${hhTotalProgramadas} HH)`);
+    }
+
     const operacionesExtraidas = Array.from(operacionesMap.values());
 
     // 4.1 Limpiar registros corruptos o textos de cabecera erróneos previos (ej: "Opción: Duración/Horas Hombres")
@@ -414,6 +474,10 @@ export class AraucoProgramParserService {
     }
 
     // 5. Guardar operaciones en la base de datos (preservando comentariosEjecucion, fotosEjecucion y evitando quitar operaciones de otras semanas)
+    let guardadasOk = 0;
+    let guardadasErr = 0;
+    const errorsList: string[] = [];
+
     for (const op of operacionesExtraidas) {
       try {
         const avisoRelacionado = await prisma.aviso.findFirst({
@@ -483,10 +547,21 @@ export class AraucoProgramParserService {
             avisoId: avisoRelacionado?.id
           }
         });
-      } catch (opSaveErr) {
-        console.error(`Error guardando operación OT ${op.numeroOrden} Op ${op.numeroOperacion}:`, opSaveErr);
+        guardadasOk++;
+      } catch (opSaveErr: any) {
+        guardadasErr++;
+        const msg = `OT ${op.numeroOrden} Op ${op.numeroOperacion}: ${opSaveErr?.message || String(opSaveErr)}`;
+        errorsList.push(msg);
+        console.error('Error guardando operación en BD:', msg);
       }
     }
+
+    debugLogs.push(`[6] Guardado en BD: ${guardadasOk} operaciones guardadas con éxito, ${guardadasErr} con error.${errorsList.length > 0 ? ' Detalle errores: ' + errorsList.join(' | ') : ''}`);
+
+    const totalEnBd = await prisma.operacionOM.count({
+      where: { semanaProg: semana, anioProg: anio }
+    });
+    debugLogs.push(`[7] Verificación final en BD: ${totalEnBd} operaciones registradas para Semana ${semana}/${anio}`);
 
     // Cálculo de HH disponibles semanales
     const totalOperariosSemana = opMiercoles + opJueves + opViernes + opSabado + opDomingo + opLunes + opMartes;
@@ -501,12 +576,16 @@ export class AraucoProgramParserService {
       fechaInicio: fechaInicio.toISOString(),
       fechaFin: fechaFin.toISOString(),
       totalOperaciones: operacionesExtraidas.length,
+      operacionesGuardadasOk: guardadasOk,
+      operacionesGuardadasErr: guardadasErr,
+      totalEnBd,
       hhDisponibles,
       hhProgramadas: hhTotalProgramadas,
       densidad,
       archivoNombre: filename,
       archivoTamano,
-      archivoFecha: archivoFecha.toISOString()
+      archivoFecha: archivoFecha.toISOString(),
+      debugLogs
     };
   }
 }
