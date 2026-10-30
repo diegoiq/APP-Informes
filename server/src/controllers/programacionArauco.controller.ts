@@ -1045,19 +1045,31 @@ export class ProgramacionAraucoController {
         ? new Date(summary.fechaInicio).getUTCMonth() + 1
         : new Date().getMonth() + 1;
 
-      // Armar/actualizar el Informe Semanal del PS importado y el Informe Mensual Consolidado
-      const [informeSemanal, informeMensual] = await Promise.all([
-        ProgramacionAraucoController.syncInformeSemanal(
-          summary.semana,
-          summary.anio,
-          summary.ptoTbjo
-        ),
-        ProgramacionAraucoController.syncInformeMensual(
-          mesProg,
-          summary.anio,
-          summary.ptoTbjo
-        )
-      ]);
+      // Armar/actualizar el Informe Semanal del PS importado y el Informe Mensual Consolidado (tolerante a fallos)
+      let informeSemanal: any = null;
+      let informeMensual: any = null;
+      try {
+        [informeSemanal, informeMensual] = await Promise.all([
+          ProgramacionAraucoController.syncInformeSemanal(
+            summary.semana,
+            summary.anio,
+            summary.ptoTbjo
+          ).catch((e) => {
+            console.error('Error sincronizando informe semanal tras upload:', e);
+            return null;
+          }),
+          ProgramacionAraucoController.syncInformeMensual(
+            mesProg,
+            summary.anio,
+            summary.ptoTbjo
+          ).catch((e) => {
+            console.error('Error sincronizando informe mensual tras upload:', e);
+            return null;
+          })
+        ]);
+      } catch (syncErr) {
+        console.error('Error general en sincronización de informes tras upload:', syncErr);
+      }
 
       return res.json({
         message: 'Programa semanal Arauco importado con éxito',

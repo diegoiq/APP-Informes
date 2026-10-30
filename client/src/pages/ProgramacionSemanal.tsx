@@ -136,6 +136,15 @@ export const ProgramacionSemanal: React.FC = () => {
     loadProgramacion();
   }, [semana, anio, ptoTbjo]);
 
+  // Disparador seguro del selector de archivos (resetea el valor para permitir volver a elegir el mismo archivo)
+  const triggerFileInput = () => {
+    if (uploading) return;
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
   // Subida de archivo PS...xlsm para la semana seleccionada
   const handleFileUpload = async (file: File) => {
     if (uploading) return;
@@ -145,16 +154,19 @@ export const ProgramacionSemanal: React.FC = () => {
       return;
     }
 
+    console.log('Subiendo archivo PS:', file.name, file.size, 'bytes. Semana:', semana, 'Año:', anio);
     setUploading(true);
     setUploadSuccess(null);
     setUploadError(null);
     try {
       const res = await api.uploadPSFile(file, semana, anio);
-      const targetSem = res.summary.semana || semana;
-      const targetAn = res.summary.anio || anio;
+      const targetSem = res.summary?.semana || semana;
+      const targetAn = res.summary?.anio || anio;
+      const opsCount = res.summary?.totalOperaciones ?? 0;
+      const hhCount = res.summary?.hhProgramadas ?? 0;
 
       setUploadSuccess(
-        `Documento "${file.name}" cargado y guardado con éxito en PS${targetSem}${targetAn} (${res.summary.totalOperaciones} operaciones | ${res.summary.hhProgramadas} HH programadas). Quedará persistido en el sistema.`
+        `Documento "${file.name}" cargado con éxito en PS${targetSem}${targetAn} (${opsCount} operaciones | ${hhCount} HH programadas).`
       );
 
       if (targetSem !== semana || targetAn !== anio) {
@@ -168,7 +180,8 @@ export const ProgramacionSemanal: React.FC = () => {
       console.error('Error al subir PS:', err);
       const msg = err.response?.data?.message || err.message || 'Error al importar archivo de programación';
       setUploadError(msg);
-      setTimeout(() => setUploadError(null), 12000);
+      alert(`Error al cargar ${file.name}: ${msg}`);
+      setTimeout(() => setUploadError(null), 15000);
     } finally {
       setUploading(false);
       setIsDragging(false);
@@ -432,6 +445,38 @@ export const ProgramacionSemanal: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 space-y-5 sm:space-y-6">
       
+      {/* Input Único Global para Subida de Planillas PS */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsm,.xlsx,.xls,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFileUpload(file);
+        }}
+        className="hidden"
+      />
+
+      {/* Overlay Modal de Carga en Pantalla Completa */}
+      {uploading && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 p-6 sm:p-8 rounded-2xl shadow-2xl flex flex-col items-center gap-4 max-w-sm text-center">
+            <RefreshCw className="w-12 h-12 text-sky-400 animate-spin" />
+            <div>
+              <h3 className="font-extrabold text-base sm:text-lg text-white">
+                Procesando Programa Semanal
+              </h3>
+              <p className="text-xs text-slate-300 mt-1">
+                Leyendo archivo y guardando operaciones en el servidor para <strong>PS{semana}{anio}</strong>...
+              </p>
+            </div>
+            <div className="text-[11px] text-sky-300 bg-sky-950/60 border border-sky-800 px-3 py-1.5 rounded-lg animate-pulse">
+              Espere unos segundos por favor...
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Encabezado Oficial Arauco Responsivo */}
       <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-6 shadow-xl border border-slate-800">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -758,7 +803,7 @@ export const ProgramacionSemanal: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => !uploading && fileInputRef.current?.click()}
+                onClick={triggerFileInput}
                 disabled={uploading}
                 className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
                 title="Cargar un nuevo archivo para actualizar esta semana"
@@ -787,22 +832,11 @@ export const ProgramacionSemanal: React.FC = () => {
             </span>
             <span className="text-slate-400 font-mono text-[10px] hidden sm:inline">Puesto: {ptoTbjo}</span>
           </div>
-
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsm,.xlsx,.xls,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFileUpload(file);
-            }}
-            className="hidden"
-          />
         </div>
       ) : (
         /* Zona Drag & Drop para cuando no hay documento cargado en esta PS */
         <div
-          onClick={() => !uploading && fileInputRef.current?.click()}
+          onClick={triggerFileInput}
           onDragEnter={(e) => {
             e.preventDefault();
             e.stopPropagation();
@@ -825,16 +859,6 @@ export const ProgramacionSemanal: React.FC = () => {
               : 'border-sky-300 hover:border-sky-500'
           }`}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".xlsm,.xlsx,.xls,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFileUpload(file);
-            }}
-            className="hidden"
-          />
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-none">
             <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
               <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-md group-hover:scale-105 transition shrink-0">
@@ -1046,7 +1070,7 @@ export const ProgramacionSemanal: React.FC = () => {
           <div className="flex items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => !uploading && fileInputRef.current?.click()}
+              onClick={triggerFileInput}
               disabled={uploading}
               className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
               title={`Cargar archivo Excel PS${semana}${anio} 340CRR.xlsm`}
@@ -1069,7 +1093,7 @@ export const ProgramacionSemanal: React.FC = () => {
         <div className="md:hidden divide-y divide-slate-200">
           {(!data?.operaciones || data.operaciones.length === 0) ? (
             <div
-              onClick={() => !uploading && fileInputRef.current?.click()}
+              onClick={triggerFileInput}
               className="p-6 text-center transition cursor-pointer flex flex-col items-center justify-center gap-3 bg-slate-50 border-2 border-dashed border-slate-300 m-3 rounded-2xl hover:border-sky-500 hover:bg-sky-50/50"
             >
               <div className="p-3 bg-sky-100 text-sky-700 rounded-xl">
@@ -1241,7 +1265,7 @@ export const ProgramacionSemanal: React.FC = () => {
                           handleFileUpload(e.dataTransfer.files[0]);
                         }
                       }}
-                      onClick={() => !uploading && fileInputRef.current?.click()}
+                      onClick={triggerFileInput}
                       className={`p-8 sm:p-12 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl ${
                         isTableDragging
                           ? 'border-emerald-500 bg-emerald-50/80 ring-4 ring-emerald-200'
@@ -1276,7 +1300,7 @@ export const ProgramacionSemanal: React.FC = () => {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                fileInputRef.current?.click();
+                                triggerFileInput();
                               }}
                               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold shadow-sm transition flex items-center gap-2 cursor-pointer"
                             >
