@@ -257,13 +257,24 @@ export class AraucoProgramParserService {
     });
 
     // 4. Extraer operaciones programadas
-    // En las planillas estándar de Arauco (ProDiaSem), los encabezados terminan en la fila 11-13 y las operaciones
-    // comienzan en la fila 12, 13 o 14. Se busca desde la fila 11 en adelante tolerando filas intermedias vacías.
+    // En las planillas oficiales de Arauco (hoja ProDiaSem), la fila de cabecera contiene "Orden" en Col B y "Operación" en Col C.
+    // Las operaciones comienzan exactamente en la fila siguiente (headerRow + 1) y terminan al llegar a "Total HH disponibles por día".
+    let headerRow = -1;
+    for (let r = 1; r <= 35; r++) {
+      const valB = parseCellString(ws.getCell(`B${r}`)).toLowerCase();
+      const valC = parseCellString(ws.getCell(`C${r}`)).toLowerCase();
+      if (valB === 'orden' || valB === 'ot' || valB === 'orden (ot)' || valC === 'operación' || valC === 'operacion') {
+        headerRow = r;
+        break;
+      }
+    }
+    if (headerRow === -1) headerRow = 13; // Fallback oficial fila 13
+
     const operacionesMap = new Map<string, any>();
     let hhTotalProgramadas = 0;
     let emptyStreak = 0;
 
-    for (let r = 11; r <= ws.rowCount; r++) {
+    for (let r = headerRow + 1; r <= ws.rowCount; r++) {
       const ordenStr = parseCellString(ws.getCell(`B${r}`));
       const descStr = parseCellString(ws.getCell(`E${r}`));
       const lowerOrden = ordenStr.toLowerCase();
@@ -273,6 +284,10 @@ export class AraucoProgramParserService {
       if (
         lowerOrden.includes('total hh disponibles') ||
         lowerDesc.includes('total hh disponibles') ||
+        lowerOrden.includes('total hh programadas') ||
+        lowerDesc.includes('total hh programadas') ||
+        lowerOrden.includes('densidad') ||
+        lowerDesc.includes('densidad') ||
         lowerOrden.startsWith('total') ||
         lowerDesc.startsWith('total general') ||
         lowerDesc.startsWith('total programad')
@@ -280,38 +295,26 @@ export class AraucoProgramParserService {
         break;
       }
 
-      // Si la fila está vacía en columna B y E, incrementamos el contador de vacías consecutivas
+      // Si la fila está vacía en columna B y E
       if (!ordenStr && !descStr) {
         emptyStreak++;
-        if (emptyStreak > 30) {
-          // Si hay más de 30 filas consecutivas vacías, asumimos fin de operaciones
-          break;
-        }
+        if (emptyStreak > 15) break;
+        continue;
+      }
+      emptyStreak = 0;
+
+      // Una OT de Arauco debe contener obligatoriamente dígitos numéricos (ej: 7996176, 8067539).
+      // Se descarta cualquier fila que no sea una orden (como "Opción: Duración/Horas Hombres", fórmulas, textos de cabecera)
+      const matchDigits = ordenStr.match(/\d{5,12}/);
+      if (!matchDigits) {
         continue;
       }
 
-      emptyStreak = 0; // Reiniciar contador si encontramos fila con texto
-
-      // Omitir filas de encabezado (ej: "Orden", "OT", "Operación", "Ubicación")
-      if (
-        lowerOrden === 'orden' ||
-        lowerOrden === 'ot' ||
-        lowerOrden === 'orden (ot)' ||
-        lowerOrden === 'nº orden' ||
-        lowerDesc === 'descripción' ||
-        lowerDesc === 'texto operacion'
-      ) {
-        continue;
-      }
-
-      // Si no hay orden pero hay descripción o viceversa, verificar si hay número de OT
-      if (!ordenStr) {
-        continue;
-      }
-
-      const numeroOrden = ordenStr;
-      const numeroOperacion = parseCellString(ws.getCell(`C${r}`), '0010').padStart(4, '0');
-      const ubicacionTecnica = parseCellString(ws.getCell(`D${r}`)) || undefined;
+      const numeroOrden = matchDigits[0];
+      const operRaw = parseCellString(ws.getCell(`C${r}`));
+      const matchOp = operRaw.match(/\d+/);
+      const numeroOperacion = matchOp ? matchOp[0].padStart(4, '0') : (operRaw || '0010');
+      const ubicacionTecnica = parseCellString(ws.getCell(`D${r}`)) || '340CRR';
       const textoOperacion = descStr || 'Operación sin texto';
 
       const mi = parseCellNumber(ws.getCell(`G${r}`), 0);
@@ -362,7 +365,18 @@ export class AraucoProgramParserService {
 
     const operacionesExtraidas = Array.from(operacionesMap.values());
 
-    // 4.1 Desasignar operaciones previas de esta misma semana que ya no estén en el archivo Excel subido
+    // 4.1 Limpiar registros corruptos o textos de cabecera erróneos previos (ej: "Opción: Duración/Horas Hombres")
+    try {
+      await prisma.operacionOM.deleteMany({
+        where: {
+          semanaProg: semana,
+          anioProg: anio,
+          numeroOrden: { contains: 'Opción' }
+        }
+      });
+    } catch {}
+
+    // 4.2 Desasignar operaciones previas de esta misma semana que ya no estén en el archivo Excel subido
     const keysNuevas = new Set<string>();
     for (const o of operacionesExtraidas) {
       keysNuevas.add(`${o.numeroOrden}__${o.numeroOperacion}`);
@@ -401,73 +415,77 @@ export class AraucoProgramParserService {
 
     // 5. Guardar operaciones en la base de datos (preservando comentariosEjecucion, fotosEjecucion y evitando quitar operaciones de otras semanas)
     for (const op of operacionesExtraidas) {
-      const avisoRelacionado = await prisma.aviso.findFirst({
-        where: { numeroOrden: op.numeroOrden },
-        select: { id: true }
-      });
+      try {
+        const avisoRelacionado = await prisma.aviso.findFirst({
+          where: { numeroOrden: op.numeroOrden },
+          select: { id: true }
+        });
 
-      const existingOp = await prisma.operacionOM.findUnique({
-        where: {
-          numeroOrden_numeroOperacion: {
+        const existingOp = await prisma.operacionOM.findUnique({
+          where: {
+            numeroOrden_numeroOperacion: {
+              numeroOrden: op.numeroOrden,
+              numeroOperacion: op.numeroOperacion
+            }
+          },
+          select: { id: true, semanaProg: true, anioProg: true }
+        });
+
+        const numOpKey =
+          existingOp &&
+          existingOp.semanaProg !== null &&
+          (existingOp.semanaProg !== semana || existingOp.anioProg !== anio)
+            ? `${op.numeroOperacion}-S${semana}`
+            : op.numeroOperacion;
+
+        await prisma.operacionOM.upsert({
+          where: {
+            numeroOrden_numeroOperacion: {
+              numeroOrden: op.numeroOrden,
+              numeroOperacion: numOpKey
+            }
+          },
+          update: {
+            textoOperacion: op.textoOperacion,
+            ubicacionTecnica: op.ubicacionTecnica,
+            ptoTbjo: op.ptoTbjo,
+            revision: op.revision,
+            semanaProg: op.semanaProg,
+            anioProg: op.anioProg,
+            hhMiercoles: op.hhMiercoles,
+            hhJueves: op.hhJueves,
+            hhViernes: op.hhViernes,
+            hhSabado: op.hhSabado,
+            hhDomingo: op.hhDomingo,
+            hhLunes: op.hhLunes,
+            hhMartes: op.hhMartes,
+            hhTotalProgramado: op.hhTotalProgramado,
+            ...(avisoRelacionado?.id ? { avisoId: avisoRelacionado.id } : {})
+          },
+          create: {
             numeroOrden: op.numeroOrden,
-            numeroOperacion: op.numeroOperacion
+            numeroOperacion: numOpKey,
+            textoOperacion: op.textoOperacion,
+            ubicacionTecnica: op.ubicacionTecnica,
+            ptoTbjo: op.ptoTbjo,
+            revision: op.revision,
+            horasEstimadas: op.horasEstimadas,
+            semanaProg: op.semanaProg,
+            anioProg: op.anioProg,
+            hhMiercoles: op.hhMiercoles,
+            hhJueves: op.hhJueves,
+            hhViernes: op.hhViernes,
+            hhSabado: op.hhSabado,
+            hhDomingo: op.hhDomingo,
+            hhLunes: op.hhLunes,
+            hhMartes: op.hhMartes,
+            hhTotalProgramado: op.hhTotalProgramado,
+            avisoId: avisoRelacionado?.id
           }
-        },
-        select: { id: true, semanaProg: true, anioProg: true }
-      });
-
-      const numOpKey =
-        existingOp &&
-        existingOp.semanaProg !== null &&
-        (existingOp.semanaProg !== semana || existingOp.anioProg !== anio)
-          ? `${op.numeroOperacion}-S${semana}`
-          : op.numeroOperacion;
-
-      await prisma.operacionOM.upsert({
-        where: {
-          numeroOrden_numeroOperacion: {
-            numeroOrden: op.numeroOrden,
-            numeroOperacion: numOpKey
-          }
-        },
-        update: {
-          textoOperacion: op.textoOperacion,
-          ubicacionTecnica: op.ubicacionTecnica,
-          ptoTbjo: op.ptoTbjo,
-          revision: op.revision,
-          semanaProg: op.semanaProg,
-          anioProg: op.anioProg,
-          hhMiercoles: op.hhMiercoles,
-          hhJueves: op.hhJueves,
-          hhViernes: op.hhViernes,
-          hhSabado: op.hhSabado,
-          hhDomingo: op.hhDomingo,
-          hhLunes: op.hhLunes,
-          hhMartes: op.hhMartes,
-          hhTotalProgramado: op.hhTotalProgramado,
-          ...(avisoRelacionado?.id ? { avisoId: avisoRelacionado.id } : {})
-        },
-        create: {
-          numeroOrden: op.numeroOrden,
-          numeroOperacion: numOpKey,
-          textoOperacion: op.textoOperacion,
-          ubicacionTecnica: op.ubicacionTecnica,
-          ptoTbjo: op.ptoTbjo,
-          revision: op.revision,
-          horasEstimadas: op.horasEstimadas,
-          semanaProg: op.semanaProg,
-          anioProg: op.anioProg,
-          hhMiercoles: op.hhMiercoles,
-          hhJueves: op.hhJueves,
-          hhViernes: op.hhViernes,
-          hhSabado: op.hhSabado,
-          hhDomingo: op.hhDomingo,
-          hhLunes: op.hhLunes,
-          hhMartes: op.hhMartes,
-          hhTotalProgramado: op.hhTotalProgramado,
-          avisoId: avisoRelacionado?.id
-        }
-      });
+        });
+      } catch (opSaveErr) {
+        console.error(`Error guardando operación OT ${op.numeroOrden} Op ${op.numeroOperacion}:`, opSaveErr);
+      }
     }
 
     // Cálculo de HH disponibles semanales
