@@ -615,7 +615,18 @@ export class ProgramacionAraucoController {
         });
       }
 
-      // 2. Obtener operaciones asignadas a esta semana
+      // 2. Obtener operaciones asignadas a esta semana (asegurando estado activo)
+      try {
+        await prisma.operacionOM.updateMany({
+          where: {
+            semanaProg: semana,
+            anioProg: anio,
+            activo: false
+          },
+          data: { activo: true }
+        });
+      } catch {}
+
       const operaciones = await prisma.operacionOM.findMany({
         where: {
           semanaProg: semana,
@@ -845,6 +856,7 @@ export class ProgramacionAraucoController {
             hhLunes: lu,
             hhMartes: ma,
             hhTotalProgramado: total,
+            activo: true,
             ...(textoOperacion && { textoOperacion: String(textoOperacion) }),
             ...(ubicacionTecnica && { ubicacionTecnica: String(ubicacionTecnica) })
           }
@@ -867,7 +879,8 @@ export class ProgramacionAraucoController {
             hhDomingo: dom,
             hhLunes: lu,
             hhMartes: ma,
-            hhTotalProgramado: total
+            hhTotalProgramado: total,
+            activo: true
           },
           create: {
             numeroOrden: String(numeroOrden),
@@ -886,7 +899,8 @@ export class ProgramacionAraucoController {
             hhDomingo: dom,
             hhLunes: lu,
             hhMartes: ma,
-            hhTotalProgramado: total
+            hhTotalProgramado: total,
+            activo: true
           }
         });
       } else {

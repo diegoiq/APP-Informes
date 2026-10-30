@@ -524,6 +524,7 @@ export class AraucoProgramParserService {
             hhLunes: op.hhLunes,
             hhMartes: op.hhMartes,
             hhTotalProgramado: op.hhTotalProgramado,
+            activo: true,
             ...(avisoRelacionado?.id ? { avisoId: avisoRelacionado.id } : {})
           },
           create: {
@@ -544,6 +545,7 @@ export class AraucoProgramParserService {
             hhLunes: op.hhLunes,
             hhMartes: op.hhMartes,
             hhTotalProgramado: op.hhTotalProgramado,
+            activo: true,
             avisoId: avisoRelacionado?.id
           }
         });
@@ -556,12 +558,23 @@ export class AraucoProgramParserService {
       }
     }
 
+    // Auto-recuperación: asegurar que todas las operaciones de esta semana tengan activo = true
+    try {
+      await prisma.operacionOM.updateMany({
+        where: {
+          semanaProg: semana,
+          anioProg: anio
+        },
+        data: { activo: true }
+      });
+    } catch {}
+
     debugLogs.push(`[6] Guardado en BD: ${guardadasOk} operaciones guardadas con éxito, ${guardadasErr} con error.${errorsList.length > 0 ? ' Detalle errores: ' + errorsList.join(' | ') : ''}`);
 
     const totalEnBd = await prisma.operacionOM.count({
-      where: { semanaProg: semana, anioProg: anio }
+      where: { semanaProg: semana, anioProg: anio, activo: true }
     });
-    debugLogs.push(`[7] Verificación final en BD: ${totalEnBd} operaciones registradas para Semana ${semana}/${anio}`);
+    debugLogs.push(`[7] Verificación final en BD: ${totalEnBd} operaciones activas registradas para Semana ${semana}/${anio}`);
 
     // Cálculo de HH disponibles semanales
     const totalOperariosSemana = opMiercoles + opJueves + opViernes + opSabado + opDomingo + opLunes + opMartes;
