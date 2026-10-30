@@ -62,7 +62,9 @@ export const ProgramacionSemanal: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [isTableDragging, setIsTableDragging] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [syncingInforme, setSyncingInforme] = useState(false);
   const [showDeleteDocModal, setShowDeleteDocModal] = useState(false);
   const [deletingDoc, setDeletingDoc] = useState(false);
@@ -145,6 +147,7 @@ export const ProgramacionSemanal: React.FC = () => {
 
     setUploading(true);
     setUploadSuccess(null);
+    setUploadError(null);
     try {
       const res = await api.uploadPSFile(file, semana, anio);
       const targetSem = res.summary.semana || semana;
@@ -160,11 +163,16 @@ export const ProgramacionSemanal: React.FC = () => {
       } else {
         await loadProgramacion();
       }
-      setTimeout(() => setUploadSuccess(null), 8000);
+      setTimeout(() => setUploadSuccess(null), 10000);
     } catch (err: any) {
-      alert(err.message || 'Error al importar archivo de programación');
+      console.error('Error al subir PS:', err);
+      const msg = err.response?.data?.message || err.message || 'Error al importar archivo de programación';
+      setUploadError(msg);
+      setTimeout(() => setUploadError(null), 12000);
     } finally {
       setUploading(false);
+      setIsDragging(false);
+      setIsTableDragging(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -536,11 +544,43 @@ export const ProgramacionSemanal: React.FC = () => {
           </div>
         )}
 
-        {/* Notificación de carga o guardado exitoso */}
+        {/* Notificación de carga o guardado exitoso / error */}
         {uploadSuccess && (
-          <div className="mt-4 p-3 bg-emerald-950 border border-emerald-700 rounded-xl text-xs text-emerald-200 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>{uploadSuccess}</span>
+          <div className="mt-4 p-3 bg-emerald-950 border border-emerald-700 rounded-xl text-xs text-emerald-200 flex items-center justify-between gap-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{uploadSuccess}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUploadSuccess(null)}
+              className="text-emerald-400 hover:text-white p-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {uploadError && (
+          <div className="mt-4 p-3 bg-red-950 border border-red-700 rounded-xl text-xs text-red-200 flex items-center justify-between gap-2 shadow-sm">
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+              <span>{uploadError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setUploadError(null)}
+              className="text-red-400 hover:text-white p-1"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        {uploading && (
+          <div className="mt-4 p-3 bg-sky-950 border border-sky-700 rounded-xl text-xs text-sky-200 flex items-center gap-2 animate-pulse">
+            <RefreshCw className="w-4 h-4 text-sky-400 animate-spin shrink-0" />
+            <span>Cargando y procesando archivo PS{semana}{anio} 340CRR... Espere un momento.</span>
           </div>
         )}
       </div>
@@ -894,7 +934,7 @@ export const ProgramacionSemanal: React.FC = () => {
         )}
 
         {/* Cajas Diarias de Dotación (Ciclo Miércoles a Martes) */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2.5 sm:gap-3">
           {DIAS.map((d) => {
             const formKey = d.key === 'mi' ? 'opMiercoles' :
                             d.key === 'ju' ? 'opJueves' :
@@ -912,15 +952,15 @@ export const ProgramacionSemanal: React.FC = () => {
             return (
               <div
                 key={d.key}
-                className={`p-3.5 rounded-xl border transition ${
+                className={`p-3 rounded-xl border transition min-w-0 ${
                   isFinDeSemana
                     ? 'bg-slate-50 border-slate-200 opacity-60'
                     : 'bg-gradient-to-b from-sky-50/50 to-white border-sky-200 shadow-sm'
                 }`}
               >
                 <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                  <span>{d.label}</span>
-                  <span className="text-[10px] text-slate-400 font-mono">Día {d.dayIndex + 1}</span>
+                  <span className="truncate">{d.label}</span>
+                  <span className="text-[10px] text-slate-400 font-mono shrink-0">Día {d.dayIndex + 1}</span>
                 </div>
 
                 <div className="mt-2 flex items-center justify-between">
@@ -1003,21 +1043,49 @@ export const ProgramacionSemanal: React.FC = () => {
               Haz clic en <strong className="text-sky-700">"Fotos y Comentarios"</strong> en cualquier línea para cargar evidencias que se unen al Informe Semanal <strong>{codigoPSActual}</strong>.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={openBacklogModal}
-            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition shadow-sm w-full sm:w-auto cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Añadir Operación desde IW37N</span>
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              onClick={() => !uploading && fileInputRef.current?.click()}
+              disabled={uploading}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+              title={`Cargar archivo Excel PS${semana}${anio} 340CRR.xlsm`}
+            >
+              <UploadCloud className="w-4 h-4" />
+              <span>{uploading ? 'Cargando...' : `Cargar Planilla PS${semana}`}</span>
+            </button>
+            <button
+              type="button"
+              onClick={openBacklogModal}
+              className="flex items-center justify-center gap-1.5 px-3 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Añadir Operación desde IW37N</span>
+            </button>
+          </div>
         </div>
 
         {/* VISTA MÓVIL (TARJETAS INTERACTIVAS < 768px) */}
         <div className="md:hidden divide-y divide-slate-200">
           {(!data?.operaciones || data.operaciones.length === 0) ? (
-            <div className="p-8 text-center text-xs text-slate-400">
-              No hay operaciones programadas para esta semana. Arrastra o selecciona el archivo <strong className="text-slate-600">PS{semana}{anio} 340CRR.xlsm</strong> arriba.
+            <div
+              onClick={() => !uploading && fileInputRef.current?.click()}
+              className="p-6 text-center transition cursor-pointer flex flex-col items-center justify-center gap-3 bg-slate-50 border-2 border-dashed border-slate-300 m-3 rounded-2xl hover:border-sky-500 hover:bg-sky-50/50"
+            >
+              <div className="p-3 bg-sky-100 text-sky-700 rounded-xl">
+                <FileSpreadsheet className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-xs text-slate-900">
+                  Sin operaciones en Semana {semana}
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Toca aquí para seleccionar <strong className="text-slate-800">PS{semana}{anio} 340CRR.xlsm</strong>
+                </p>
+              </div>
+              <span className="px-3.5 py-2 bg-sky-600 text-white rounded-xl text-xs font-bold shadow-sm">
+                {uploading ? 'Cargando y procesando...' : `Cargar Archivo PS${semana}`}
+              </span>
             </div>
           ) : (
             data.operaciones.map((op: any) => {
@@ -1148,8 +1216,94 @@ export const ProgramacionSemanal: React.FC = () => {
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {(!data?.operaciones || data.operaciones.length === 0) ? (
                 <tr>
-                  <td colSpan={14} className="py-12 text-center text-slate-400">
-                    No hay operaciones programadas para esta semana. Arrastra el archivo <strong className="text-slate-600">PS{semana}{anio} 340CRR.xlsm</strong> o haz clic en "+ Añadir Operación desde IW37N".
+                  <td colSpan={14} className="p-4">
+                    <div
+                      onDragEnter={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsTableDragging(true);
+                      }}
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!isTableDragging) setIsTableDragging(true);
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsTableDragging(false);
+                      }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setIsTableDragging(false);
+                        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                          handleFileUpload(e.dataTransfer.files[0]);
+                        }
+                      }}
+                      onClick={() => !uploading && fileInputRef.current?.click()}
+                      className={`p-8 sm:p-12 text-center transition-all cursor-pointer flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-2xl ${
+                        isTableDragging
+                          ? 'border-emerald-500 bg-emerald-50/80 ring-4 ring-emerald-200'
+                          : 'border-slate-300 hover:border-sky-500 hover:bg-sky-50/40 bg-slate-50/70'
+                      }`}
+                    >
+                      {uploading ? (
+                        <div className="flex flex-col items-center gap-3 py-4">
+                          <RefreshCw className="w-10 h-10 text-sky-600 animate-spin" />
+                          <div className="font-extrabold text-sm text-slate-800">
+                            Cargando y procesando archivo PS{semana}{anio}...
+                          </div>
+                          <div className="text-xs text-slate-500">
+                            Extrayendo dotación, operaciones y guardando documento en el servidor...
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="p-4 bg-sky-100 text-sky-700 rounded-2xl shadow-sm">
+                            <FileSpreadsheet className="w-8 h-8" />
+                          </div>
+                          <div className="max-w-md">
+                            <h4 className="font-extrabold text-sm sm:text-base text-slate-900">
+                              No hay operaciones programadas para Semana {semana} ({codigoPSActual})
+                            </h4>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Arrastra y suelta aquí el archivo oficial <strong className="text-slate-800">PS{semana}{anio} 340CRR.xlsm</strong> o haz clic para seleccionarlo.
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-3 mt-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                fileInputRef.current?.click();
+                              }}
+                              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-extrabold shadow-sm transition flex items-center gap-2 cursor-pointer"
+                            >
+                              <UploadCloud className="w-4 h-4" />
+                              <span>Cargar archivo PS{semana}{anio} 340CRR.xlsm</span>
+                            </button>
+                            <span className="text-xs text-slate-400 font-medium">o</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openBacklogModal();
+                              }}
+                              className="px-3.5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+                            >
+                              + Añadir desde IW37N
+                            </button>
+                          </div>
+                          {data?.dotacion?.archivoNombre && (
+                            <div className="mt-2 text-[11px] text-emerald-800 bg-emerald-100/70 border border-emerald-300 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                              <span>Archivo cargado: <strong>{data.dotacion.archivoNombre}</strong> (0 operaciones detectadas). Puedes volver a cargarlo arriba.</span>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ) : (

@@ -87,17 +87,17 @@ export const Navbar: React.FC = () => {
   };
 
   const navItems = [
-    { to: '/sap', label: 'Ingesta SAP', icon: FileSpreadsheet },
-    { to: '/programacion', label: 'Programa Semanal PS', icon: CalendarDays },
-    { to: '/triaje', label: 'Cartera & Backlog OM', icon: Filter },
-    { to: '/personal', label: 'Dotación', icon: Users },
-    { to: '/obras', label: 'Libro Diario', icon: BookOpen },
-    { to: '/informes', label: 'Informes CRR', icon: FileText },
+    { to: '/sap', label: 'Ingesta SAP', shortLabel: 'SAP', icon: FileSpreadsheet },
+    { to: '/programacion', label: 'Programa Semanal PS', shortLabel: 'Programa PS', icon: CalendarDays },
+    { to: '/triaje', label: 'Cartera & Backlog OM', shortLabel: 'Cartera OM', icon: Filter },
+    { to: '/personal', label: 'Dotación', shortLabel: 'Dotación', icon: Users },
+    { to: '/obras', label: 'Libro Diario', shortLabel: 'Libro Diario', icon: BookOpen },
+    { to: '/informes', label: 'Informes CRR', shortLabel: 'Informes CRR', icon: FileText },
   ];
 
   return (
     <header className="bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-40 shadow-lg">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+      <div className="w-full px-2 sm:px-4 lg:px-6">
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
           
           {/* Logo y Marca */}
@@ -119,7 +119,7 @@ export const Navbar: React.FC = () => {
           </div>
 
           {/* Menú de Navegación Escritorio Amplio */}
-          <nav className="hidden xl:flex items-center space-x-1 shrink-0">
+          <nav className="hidden xl:flex items-center gap-1 shrink-0">
             {navItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -127,22 +127,23 @@ export const Navbar: React.FC = () => {
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
-                    `flex items-center gap-1.5 px-2.5 py-2 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
+                    `flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-semibold whitespace-nowrap transition-all ${
                       isActive
                         ? 'bg-slate-800 text-sky-400 border-b-2 border-sky-400'
                         : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
                     }`
                   }
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  <span>{item.label}</span>
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="hidden 2xl:inline">{item.label}</span>
+                  <span className="2xl:hidden">{item.shortLabel}</span>
                 </NavLink>
               );
             })}
           </nav>
 
           {/* Estado Render, Usuario, Cupos y Salida */}
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-nowrap">
             {/* Botón Estado de Render y Espacios Disponibles */}
             <button
               type="button"
@@ -150,21 +151,24 @@ export const Navbar: React.FC = () => {
                 fetchSystemStatus();
                 setShowRenderModal(true);
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 transition cursor-pointer shadow-sm"
+              className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 transition cursor-pointer shadow-sm shrink-0"
               title="Ver Estado de Render, Espacios Disponibles en BD/RAM y Variables del Sistema"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
               <Server className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-              <span className="hidden lg:inline">
+              <span className="hidden 2xl:inline">
                 Render: {sysStatus?.storage?.database?.availableMb ?? '1014'} MB disp.
               </span>
-              <span className="lg:hidden">Render</span>
+              <span className="hidden sm:inline 2xl:hidden">
+                {sysStatus?.storage?.database?.availableMb ?? '1014'} MB
+              </span>
+              <span className="sm:hidden">Render</span>
             </button>
 
             {/* Badge de Cupos 5 Usuarios */}
             {stats && (
               <div
-                className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
+                className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border shrink-0 ${
                   stats.limiteAlcanzado
                     ? 'bg-red-950/80 text-red-300 border-red-800'
                     : 'bg-emerald-950/80 text-emerald-300 border-emerald-800'
@@ -172,7 +176,8 @@ export const Navbar: React.FC = () => {
                 title="Límite estricto de 5 usuarios registrados en la plataforma"
               >
                 <Users className="w-3.5 h-3.5" />
-                <span>Cupos: {stats.registrados} / {stats.maximo}</span>
+                <span className="hidden 2xl:inline">Cupos: {stats.registrados} / {stats.maximo}</span>
+                <span className="2xl:hidden">{stats.registrados}/{stats.maximo}</span>
               </div>
             )}
 
@@ -181,11 +186,13 @@ export const Navbar: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowClearModal(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer"
+                className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition shadow-sm cursor-pointer shrink-0"
                 title="Borrar toda la base cargada (Avisos, Órdenes SAP y registros asociados)"
               >
-                <Trash2 className="w-3.5 h-3.5 text-white" />
-                <span className="hidden sm:inline">Borrar toda la base</span>
+                <Trash2 className="w-3.5 h-3.5 text-white shrink-0" />
+                <span className="hidden 2xl:inline">Borrar toda la base</span>
+                <span className="hidden xl:inline 2xl:hidden">Borrar base</span>
+                <span className="xl:hidden sm:inline">Borrar</span>
               </button>
             )}
 

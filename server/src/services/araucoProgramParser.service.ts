@@ -256,17 +256,57 @@ export class AraucoProgramParserService {
       }
     });
 
-    // 4. Extraer operaciones programadas (fila 14 en adelante en ProDiaSem)
+    // 4. Extraer operaciones programadas
+    // En las planillas estándar de Arauco (ProDiaSem), los encabezados terminan en la fila 11-13 y las operaciones
+    // comienzan en la fila 12, 13 o 14. Se busca desde la fila 11 en adelante tolerando filas intermedias vacías.
     const operacionesMap = new Map<string, any>();
     let hhTotalProgramadas = 0;
+    let emptyStreak = 0;
 
-    for (let r = 14; r <= ws.rowCount; r++) {
+    for (let r = 11; r <= ws.rowCount; r++) {
       const ordenStr = parseCellString(ws.getCell(`B${r}`));
       const descStr = parseCellString(ws.getCell(`E${r}`));
+      const lowerOrden = ordenStr.toLowerCase();
+      const lowerDesc = descStr.toLowerCase();
 
-      if (!ordenStr || ordenStr.toLowerCase().includes('total')) {
-        if (descStr.toLowerCase().includes('total hh disponibles')) break;
-        if (!ordenStr) break;
+      // Detección de fila de totales o fin de tabla
+      if (
+        lowerOrden.includes('total hh disponibles') ||
+        lowerDesc.includes('total hh disponibles') ||
+        lowerOrden.startsWith('total') ||
+        lowerDesc.startsWith('total general') ||
+        lowerDesc.startsWith('total programad')
+      ) {
+        break;
+      }
+
+      // Si la fila está vacía en columna B y E, incrementamos el contador de vacías consecutivas
+      if (!ordenStr && !descStr) {
+        emptyStreak++;
+        if (emptyStreak > 30) {
+          // Si hay más de 30 filas consecutivas vacías, asumimos fin de operaciones
+          break;
+        }
+        continue;
+      }
+
+      emptyStreak = 0; // Reiniciar contador si encontramos fila con texto
+
+      // Omitir filas de encabezado (ej: "Orden", "OT", "Operación", "Ubicación")
+      if (
+        lowerOrden === 'orden' ||
+        lowerOrden === 'ot' ||
+        lowerOrden === 'orden (ot)' ||
+        lowerOrden === 'nº orden' ||
+        lowerDesc === 'descripción' ||
+        lowerDesc === 'texto operacion'
+      ) {
+        continue;
+      }
+
+      // Si no hay orden pero hay descripción o viceversa, verificar si hay número de OT
+      if (!ordenStr) {
+        continue;
       }
 
       const numeroOrden = ordenStr;
