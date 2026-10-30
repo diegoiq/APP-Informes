@@ -5,6 +5,150 @@ import { AuthenticatedRequest } from '../middlewares/auth.middleware';
 
 export class ProgramacionAraucoController {
   /**
+   * Construye una mini tabla estructurada y estilizada del Programa Semanal
+   * con columnas de Orden SAP, Op, Ubicación, Tarea, HH, Estado (con badges de color)
+   * y avances/evidencias de campo, en sustitución del texto plano con viñetas.
+   */
+  public static buildMiniTablaProgramaSemanalHtml(
+    tituloCabecera: string,
+    operaciones: any[],
+    hhDisp: number = 0,
+    hhProg: number = 0,
+    densidad: number = 0,
+    esMensual: boolean = false
+  ): string {
+    if (!operaciones || operaciones.length === 0) {
+      return `
+        <div style="background: #f8fafc; padding: 14px; border: 1px dashed #cbd5e1; border-radius: 8px; text-align: center; color: #64748b; font-size: 9pt; font-style: italic;">
+          📋 No se registran operaciones programadas en este período (${tituloCabecera}).
+        </div>
+      `;
+    }
+
+    let completadas = 0;
+    let enCurso = 0;
+    let pendientes = 0;
+
+    operaciones.forEach((op) => {
+      const est = (op.estadoEjecucion || 'Pendiente').toLowerCase();
+      if (est.includes('comple') || est.includes('termina')) completadas++;
+      else if (est.includes('ejecu') || est.includes('curso')) enCurso++;
+      else pendientes++;
+    });
+
+    const rowsHtml = operaciones
+      .map((op, idx) => {
+        const estado = op.estadoEjecucion || 'Pendiente';
+        let badgeBg = '#fef3c7';
+        let badgeColor = '#92400e';
+        let badgeBorder = '#fde68a';
+        let estadoLabel = estado;
+
+        const estLower = estado.toLowerCase();
+        if (estLower.includes('comple') || estLower.includes('termina')) {
+          badgeBg = '#dcfce7';
+          badgeColor = '#166534';
+          badgeBorder = '#86efac';
+          estadoLabel = 'Completado';
+        } else if (estLower.includes('ejecu') || estLower.includes('curso')) {
+          badgeBg = '#e0f2fe';
+          badgeColor = '#075985';
+          badgeBorder = '#7dd3fc';
+          estadoLabel = 'En Ejecución';
+        } else if (estLower.includes('reprog') || estLower.includes('posterg')) {
+          badgeBg = '#f3e8ff';
+          badgeColor = '#6b21a8';
+          badgeBorder = '#d8b4fe';
+          estadoLabel = 'Reprogramado';
+        } else {
+          estadoLabel = 'Pendiente';
+        }
+
+        let fotosCount = 0;
+        if (op.fotosEjecucion) {
+          try {
+            const parsed = JSON.parse(op.fotosEjecucion);
+            if (Array.isArray(parsed)) fotosCount = parsed.length;
+          } catch {}
+        }
+
+        const tieneComentario = Boolean(op.comentariosEjecucion && op.comentariosEjecucion.trim());
+        const comentarioTexto = tieneComentario ? op.comentariosEjecucion.trim() : '';
+
+        return `
+          <tr style="background: ${idx % 2 === 0 ? '#ffffff' : '#f8fafc'};">
+            <td style="font-weight: 700; color: #0f172a; white-space: nowrap; padding: 7px 9px; border: 1px solid #cbd5e1; font-size: 8.5pt;">
+              ${op.numeroOrden}
+            </td>
+            <td style="text-align: center; font-family: monospace; font-size: 8pt; color: #475569; padding: 7px 8px; border: 1px solid #cbd5e1; white-space: nowrap;">
+              ${op.numeroOperacion}
+            </td>
+            <td style="color: #475569; font-size: 8pt; padding: 7px 8px; border: 1px solid #cbd5e1; white-space: nowrap;">
+              ${op.ubicacionTecnica || '340CRR'}
+            </td>
+            <td style="color: #1e293b; font-weight: 500; font-size: 8.5pt; padding: 7px 9px; border: 1px solid #cbd5e1;">
+              ${op.textoOperacion}
+            </td>
+            <td style="text-align: center; font-weight: 700; color: #0284c7; padding: 7px 8px; border: 1px solid #cbd5e1; font-size: 8.5pt; white-space: nowrap;">
+              ${op.hhTotalProgramado} HH
+            </td>
+            <td style="text-align: center; padding: 7px 8px; border: 1px solid #cbd5e1; white-space: nowrap;">
+              <span style="display: inline-block; background: ${badgeBg}; color: ${badgeColor}; border: 1px solid ${badgeBorder}; padding: 3px 8px; border-radius: 9999px; font-weight: 700; font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.3px;">
+                ${estadoLabel}
+              </span>
+            </td>
+            <td style="color: #475569; font-size: 7.5pt; padding: 7px 9px; border: 1px solid #cbd5e1;">
+              ${comentarioTexto ? `<div style="color: #0f172a; font-weight: 500; margin-bottom: 3px; line-height: 1.3;">${comentarioTexto}</div>` : ''}
+              ${fotosCount > 0 ? `<span style="display: inline-block; background: #e2e8f0; color: #1e293b; padding: 1px 6px; border-radius: 4px; font-size: 7pt; font-weight: 600; border: 1px solid #cbd5e1;">📷 ${fotosCount} foto${fotosCount > 1 ? 's' : ''}</span>` : (!comentarioTexto ? '<span style="color: #94a3b8; font-style: italic;">Sin comentarios</span>' : '')}
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    return `
+      <div style="width: 100%; margin: 4px 0 10px 0; font-family: Calibri, 'Segoe UI', Arial, sans-serif; white-space: normal;">
+        <div style="background: #0f172a; color: #ffffff; padding: 9px 12px; border-radius: 6px 6px 0 0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+          <div style="font-size: 9.5pt; font-weight: 700; letter-spacing: 0.3px;">
+            📋 ${esMensual ? 'CONSOLIDADO MENSUAL DE OPERACIONES' : 'PROGRAMA SEMANAL'}: ${tituloCabecera}
+          </div>
+          <div style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 8pt;">
+            <span style="background: #1e293b; color: #f1f5f9; padding: 3px 8px; border-radius: 4px; border: 1px solid #475569; font-weight: 600;">
+              Total: <strong>${operaciones.length} OTs</strong> (${hhProg} HH)
+            </span>
+            <span style="background: #dcfce7; color: #166534; padding: 3px 8px; border-radius: 4px; font-weight: 700; border: 1px solid #86efac;">
+              ✓ ${completadas} Completadas
+            </span>
+            <span style="background: #e0f2fe; color: #075985; padding: 3px 8px; border-radius: 4px; font-weight: 700; border: 1px solid #7dd3fc;">
+              ⏳ ${enCurso} En Curso
+            </span>
+            <span style="background: #fef3c7; color: #92400e; padding: 3px 8px; border-radius: 4px; font-weight: 700; border: 1px solid #fde68a;">
+              ⏱ ${pendientes} Pendientes
+            </span>
+          </div>
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 8.5pt; background: #ffffff; border: 1px solid #cbd5e1; border-top: none;">
+          <thead>
+            <tr style="background: #f1f5f9;">
+              <th style="padding: 8px 9px; border: 1px solid #cbd5e1; text-align: left; font-size: 7.5pt; text-transform: uppercase; color: #0f172a; width: 11%;">Orden SAP</th>
+              <th style="padding: 8px 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 7.5pt; text-transform: uppercase; color: #0f172a; width: 6%;">Op.</th>
+              <th style="padding: 8px 8px; border: 1px solid #cbd5e1; text-align: left; font-size: 7.5pt; text-transform: uppercase; color: #0f172a; width: 13%;">Ubicación</th>
+              <th style="padding: 8px 9px; border: 1px solid #cbd5e1; text-align: left; font-size: 7.5pt; text-transform: uppercase; color: #0f172a; width: 33%;">Descripción de los Trabajos</th>
+              <th style="padding: 8px 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 7.5pt; text-transform: uppercase; color: #0f172a; width: 9%;">HH Prog.</th>
+              <th style="padding: 8px 8px; border: 1px solid #cbd5e1; text-align: center; font-size: 7.5pt; text-transform: uppercase; color: #0f172a; width: 12%;">Estado</th>
+              <th style="padding: 8px 9px; border: 1px solid #cbd5e1; text-align: left; font-size: 7.5pt; text-transform: uppercase; color: #0f172a; width: 16%;">Avance / Evidencia</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  /**
    * Sincroniza y almacena automáticamente el Informe de Trabajos de la Semana
    * con el nombre del PS en curso (ej: "PS442026 340CRR") uniendo comentarios y fotos de cada línea.
    */
@@ -127,10 +271,15 @@ export class ProgramacionAraucoController {
         ? `Avance semanal ${codigoPS}: ${lineasConEvidencia.length} operación(es) con comentarios/evidencias fotográficas (${fotosParaInforme.length} fotos registradas).`
         : `Programa Semanal ${codigoPS} activo con ${operaciones.length} operaciones programadas (${hhProg} HH).`;
 
-    const lugarObraTexto =
-      lineasConEvidencia.length > 0
-        ? `DETALLE DE TRABAJOS CON COMENTARIOS Y EVIDENCIAS (${codigoPS}):\n${lineasConEvidencia.join('\n\n')}\n\n---\nLISTADO COMPLETO DE OPERACIONES DEL PROGRAMA (${operaciones.length} líneas):\n${lineasResumenGeneral.join('\n')}`
-        : `LISTADO DE OPERACIONES PROGRAMADAS EN ${codigoPS} (${operaciones.length} líneas):\n${lineasResumenGeneral.join('\n')}`;
+    // Mini tabla del programa semanal estructurada con estados y evidencias
+    const lugarObraTexto = ProgramacionAraucoController.buildMiniTablaProgramaSemanalHtml(
+      codigoPS,
+      operaciones,
+      hhDisp,
+      hhProg,
+      densidad,
+      false
+    );
 
     const anexosTexto = `Resumen de Capacidad Semanal ${codigoPS}: Miércoles (${dotacion?.opMiercoles ?? 4} op), Jueves (${dotacion?.opJueves ?? 6} op), Viernes (${dotacion?.opViernes ?? 8} op), Sábado (${dotacion?.opSabado ?? 0} op), Domingo (${dotacion?.opDomingo ?? 0} op), Lunes (${dotacion?.opLunes ?? 9} op), Martes (${dotacion?.opMartes ?? 9} op). Total HH Programadas: ${hhProg} HH / ${hhDisp} HH disponibles (${densidad}%).`;
 
@@ -318,10 +467,15 @@ export class ProgramacionAraucoController {
 
     const observaciones = `Cierre Mensual ${nombreMes} ${anio} (${ptoTbjo}): ${lineasConAvanceMes.length} líneas con comentarios técnicos y ${fotosParaInformeMes.length} evidencias fotográficas acumuladas.`;
 
-    const lugarObraTexto =
-      lineasConAvanceMes.length > 0
-        ? `RESUMEN DE TRABAJOS CON COMENTARIOS Y EVIDENCIAS DEL MES DE ${nombreMes} ${anio}:\n${lineasConAvanceMes.join('\n\n')}\n\n---\nDETALLE GENERAL DE OPERACIONES DEL MES (${operacionesMes.length} líneas):\n${lineasTodasMes.join('\n')}`
-        : `DETALLE DE OPERACIONES PROGRAMADAS EN ${nombreMes} ${anio} (${operacionesMes.length} líneas):\n${lineasTodasMes.join('\n')}`;
+    // Mini tabla del consolidado mensual estructurada con estados y evidencias
+    const lugarObraTexto = ProgramacionAraucoController.buildMiniTablaProgramaSemanalHtml(
+      codigoMensual,
+      operacionesMes,
+      0,
+      hhProgTotalMes,
+      0,
+      true
+    );
 
     const anexosTexto = `Consolidado Mensual ${nombreMes} ${anio} — Programas Semanales incluidos: ${
       semanasDelMes.map((s) => `PS${s}${anio}`).join(', ')
@@ -393,7 +547,15 @@ export class ProgramacionAraucoController {
       const semanasDisponibles = await prisma.dotacionSemanalArauco.findMany({
         where: { ptoTbjo },
         orderBy: [{ anio: 'desc' }, { semana: 'desc' }],
-        select: { semana: true, anio: true, fechaInicio: true, fechaFin: true }
+        select: {
+          semana: true,
+          anio: true,
+          fechaInicio: true,
+          fechaFin: true,
+          archivoNombre: true,
+          archivoTamano: true,
+          archivoFecha: true
+        }
       });
 
       let semana = req.query.semana ? parseInt(String(req.query.semana), 10) : 44;
@@ -521,13 +683,20 @@ export class ProgramacionAraucoController {
         })
       ]);
 
+      // Omitir archivoData base64 pesado del payload general de dotación para optimizar rendimiento
+      const { archivoData, ...dotacionInfo } = dotacion as any;
+      const dotacionSanitized = {
+        ...dotacionInfo,
+        tieneDocumento: Boolean(dotacion.archivoNombre || archivoData)
+      };
+
       return res.json({
         semana,
         anio,
         mes: mesActual,
         codigoPS,
         codigoMensual,
-        dotacion,
+        dotacion: dotacionSanitized,
         operaciones,
         horasDisponibles: disp,
         horasProgramadas: prog,
@@ -868,7 +1037,8 @@ export class ProgramacionAraucoController {
         req.file.buffer,
         req.file.originalname,
         targetSemana,
-        targetAnio
+        targetAnio,
+        req.file.mimetype
       );
 
       const mesProg = summary.fechaInicio
@@ -901,6 +1071,119 @@ export class ProgramacionAraucoController {
         message: 'Error al importar programa semanal Arauco',
         error: error.message || String(error)
       });
+    }
+  }
+
+  /**
+   * Descarga el documento oficial (.xlsm / .xlsx) guardado para la PS solicitada
+   */
+  public static async downloadDocumento(req: Request, res: Response) {
+    try {
+      const semana = parseInt(String(req.query.semana || '44'), 10);
+      const anio = parseInt(String(req.query.anio || '2026'), 10);
+      const ptoTbjo = String(req.query.ptoTbjo || '340CRR').trim();
+
+      const dotacion = await prisma.dotacionSemanalArauco.findUnique({
+        where: {
+          semana_anio_ptoTbjo: { semana, anio, ptoTbjo }
+        },
+        select: {
+          archivoNombre: true,
+          archivoData: true,
+          archivoMimeType: true
+        }
+      });
+
+      if (!dotacion || !dotacion.archivoData) {
+        return res.status(404).json({
+          message: `No se encontró ningún documento guardado para PS${semana}${anio} (${ptoTbjo}).`
+        });
+      }
+
+      const fileBuffer = Buffer.from(dotacion.archivoData, 'base64');
+      const filename = dotacion.archivoNombre || `PS${semana}${anio}_${ptoTbjo}.xlsm`;
+      const mimeType = dotacion.archivoMimeType || 'application/vnd.ms-excel.sheet.macroEnabled.12';
+
+      res.setHeader('Content-Type', mimeType);
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+      res.setHeader('Content-Length', fileBuffer.length);
+      return res.send(fileBuffer);
+    } catch (error: any) {
+      console.error('Error al descargar documento de la PS:', error);
+      return res.status(500).json({ message: 'Error al descargar documento', error: error.message });
+    }
+  }
+
+  /**
+   * Elimina el documento cargado en la PS para optimizar y liberar almacenamiento en Render
+   * Opcionalmente desasigna las operaciones de la semana si se desea resetear la PS.
+   */
+  public static async deleteDocumento(req: AuthenticatedRequest, res: Response) {
+    try {
+      const semana = parseInt(String(req.query.semana || req.body.semana || '44'), 10);
+      const anio = parseInt(String(req.query.anio || req.body.anio || '2026'), 10);
+      const ptoTbjo = String(req.query.ptoTbjo || req.body.ptoTbjo || '340CRR').trim();
+      const limpiarOperaciones = String(req.query.limpiarOperaciones || req.body.limpiarOperaciones) === 'true';
+
+      const dotacion = await prisma.dotacionSemanalArauco.findUnique({
+        where: {
+          semana_anio_ptoTbjo: { semana, anio, ptoTbjo }
+        }
+      });
+
+      if (!dotacion) {
+        return res.status(404).json({ message: `No se encontró programación para PS${semana}${anio}.` });
+      }
+
+      // 1. Limpiar campos del archivo en la dotación para liberar almacenamiento en Render
+      await prisma.dotacionSemanalArauco.update({
+        where: { id: dotacion.id },
+        data: {
+          archivoNombre: null,
+          archivoData: null,
+          archivoTamano: null,
+          archivoMimeType: null,
+          archivoFecha: null
+        }
+      });
+
+      // 2. Si se solicitó limpiar operaciones asociadas de esta semana
+      let opsAfectadas = 0;
+      if (limpiarOperaciones) {
+        const ops = await prisma.operacionOM.updateMany({
+          where: {
+            semanaProg: semana,
+            anioProg: anio,
+            ptoTbjo: { contains: ptoTbjo }
+          },
+          data: {
+            semanaProg: null,
+            anioProg: null,
+            hhMiercoles: 0,
+            hhJueves: 0,
+            hhViernes: 0,
+            hhSabado: 0,
+            hhDomingo: 0,
+            hhLunes: 0,
+            hhMartes: 0,
+            hhTotalProgramado: 0
+          }
+        });
+        opsAfectadas = ops.count;
+      }
+
+      return res.json({
+        message: `Documento de PS${semana}${anio} eliminado con éxito de la base de datos (espacio liberado en Render).${
+          limpiarOperaciones ? ` ${opsAfectadas} operaciones desvinculadas de la semana.` : ''
+        }`,
+        semana,
+        anio,
+        ptoTbjo,
+        limpiarOperaciones
+      });
+    } catch (error: any) {
+      console.error('Error al eliminar documento de la PS:', error);
+      return res.status(500).json({ message: 'Error al eliminar documento', error: error.message });
     }
   }
 

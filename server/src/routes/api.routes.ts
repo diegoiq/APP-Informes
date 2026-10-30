@@ -55,6 +55,8 @@ router.delete('/programacion/asignacion/:id', authMiddleware as any, PersonalCon
 // 5.1 PROGRAMA DIARIO SEMANAL OFICIAL ARAUCO (PS432026 / PS442026 / IW37N)
 router.get('/programacion/arauco', ProgramacionAraucoController.getProgramacion);
 router.post('/programacion/arauco/upload', upload.single('file'), ProgramacionAraucoController.uploadPSFile);
+router.get('/programacion/arauco/documento/download', ProgramacionAraucoController.downloadDocumento);
+router.delete('/programacion/arauco/documento', authMiddleware as any, ProgramacionAraucoController.deleteDocumento as any);
 router.post('/programacion/arauco/dotacion', authMiddleware as any, ProgramacionAraucoController.updateDotacion as any);
 router.post('/programacion/arauco/operacion', authMiddleware as any, ProgramacionAraucoController.saveOperacion as any);
 router.post('/programacion/arauco/operacion/:id/evidencia', authMiddleware as any, ProgramacionAraucoController.guardarEvidenciaOperacion as any);

@@ -12,6 +12,9 @@ export interface AraucoProgramSummary {
   hhDisponibles: number;
   hhProgramadas: number;
   densidad: number;
+  archivoNombre?: string;
+  archivoTamano?: number;
+  archivoFecha?: string;
 }
 
 function unwrapCellValue(cell: ExcelJS.Cell | undefined): any {
@@ -48,7 +51,8 @@ export class AraucoProgramParserService {
     fileBuffer: Buffer,
     filename: string = 'PS-Arauco.xlsm',
     targetSemana?: number,
-    targetAnio?: number
+    targetAnio?: number,
+    mimeType?: string
   ): Promise<AraucoProgramSummary> {
     const workbook = new ExcelJS.Workbook();
     // @ts-ignore exceljs accepts buffer
@@ -114,26 +118,33 @@ export class AraucoProgramParserService {
       parseExcelDate(wsExport?.getCell('C4')) ||
       parseExcelDate(wsPegado?.getCell('C4'));
 
-    // Deducir semana y año desde el nombre de archivo (ej: PS432026, PS 43-2026, PS42...), de la semana seleccionada en UI o de las fechas
-    let semana = targetSemana && targetSemana >= 1 && targetSemana <= 53 ? targetSemana : 44;
-    let anio = targetAnio && targetAnio >= 2020 && targetAnio <= 2035 ? targetAnio : 2026;
+    // Deducir semana y año: si targetSemana/targetAnio fueron enviados desde la UI (selector de PS),
+    // se respeta esa selección prioritaria para cargar el documento en la PS elegida.
+    // Si no fueron especificados, se deduce del nombre de archivo (ej: PS432026, PS44...) o de las fechas.
+    let semana = targetSemana && targetSemana >= 1 && targetSemana <= 53 ? targetSemana : undefined;
+    let anio = targetAnio && targetAnio >= 2020 && targetAnio <= 2035 ? targetAnio : undefined;
 
-    const matchNameFull = filename.match(/PS[\s_-]*(\d{1,2})[\s_-]*(\d{4})/i);
-    const matchNameShort = !matchNameFull ? filename.match(/PS[\s_-]*(\d{1,2})(?:\b|[\s_-])/i) : null;
+    if (!semana || !anio) {
+      const matchNameFull = filename.match(/PS[\s_-]*(\d{1,2})[\s_-]*(\d{4})/i);
+      const matchNameShort = !matchNameFull ? filename.match(/PS[\s_-]*(\d{1,2})(?:\b|[\s_-])/i) : null;
 
-    if (matchNameFull) {
-      semana = parseInt(matchNameFull[1], 10);
-      anio = parseInt(matchNameFull[2], 10);
-    } else if (matchNameShort) {
-      semana = parseInt(matchNameShort[1], 10);
-    } else if (!targetSemana && fechaInicio && !isNaN(fechaInicio.getTime())) {
-      const d = new Date(Date.UTC(fechaInicio.getUTCFullYear(), fechaInicio.getUTCMonth(), fechaInicio.getUTCDate()));
-      const dayNum = d.getUTCDay() || 7;
-      d.setUTCDate(d.getUTCDate() + 4 - dayNum);
-      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-      semana = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-      anio = d.getUTCFullYear();
+      if (matchNameFull) {
+        if (!semana) semana = parseInt(matchNameFull[1], 10);
+        if (!anio) anio = parseInt(matchNameFull[2], 10);
+      } else if (matchNameShort) {
+        if (!semana) semana = parseInt(matchNameShort[1], 10);
+      } else if (fechaInicio && !isNaN(fechaInicio.getTime())) {
+        const d = new Date(Date.UTC(fechaInicio.getUTCFullYear(), fechaInicio.getUTCMonth(), fechaInicio.getUTCDate()));
+        const dayNum = d.getUTCDay() || 7;
+        d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        if (!semana) semana = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+        if (!anio) anio = d.getUTCFullYear();
+      }
     }
+
+    if (!semana) semana = 44;
+    if (!anio) anio = 2026;
 
     if (!fechaInicio) {
       const baseDate = new Date(Date.UTC(anio, 0, 1, 12, 0, 0));
@@ -189,7 +200,13 @@ export class AraucoProgramParserService {
     const opLunes = readOperariosDia('M', 'L');
     const opMartes = readOperariosDia('N', 'M');
 
-    // Guardar / actualizar dotación semanal en BD
+    // Metadatos y buffer del archivo original guardado para persistencia en BD
+    const archivoData = fileBuffer.toString('base64');
+    const archivoTamano = fileBuffer.length;
+    const archivoFecha = new Date();
+    const archivoMimeType = mimeType || 'application/vnd.ms-excel.sheet.macroEnabled.12';
+
+    // Guardar / actualizar dotación semanal en BD junto con el documento adjunto de la PS
     await prisma.dotacionSemanalArauco.upsert({
       where: {
         semana_anio_ptoTbjo: {
@@ -209,7 +226,12 @@ export class AraucoProgramParserService {
         opDomingo,
         opLunes,
         opMartes,
-        horasJornada
+        horasJornada,
+        archivoNombre: filename,
+        archivoData,
+        archivoTamano,
+        archivoMimeType,
+        archivoFecha
       },
       create: {
         semana,
@@ -225,7 +247,12 @@ export class AraucoProgramParserService {
         opDomingo,
         opLunes,
         opMartes,
-        horasJornada
+        horasJornada,
+        archivoNombre: filename,
+        archivoData,
+        archivoTamano,
+        archivoMimeType,
+        archivoFecha
       }
     });
 
@@ -418,7 +445,10 @@ export class AraucoProgramParserService {
       totalOperaciones: operacionesExtraidas.length,
       hhDisponibles,
       hhProgramadas: hhTotalProgramadas,
-      densidad
+      densidad,
+      archivoNombre: filename,
+      archivoTamano,
+      archivoFecha: archivoFecha.toISOString()
     };
   }
 }

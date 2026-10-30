@@ -750,12 +750,19 @@ export const InformesCRR: React.FC = () => {
 
                   {/* 2. LUGAR DE LA OBRA */}
                   <div className="space-y-1">
-                    <h3 className="font-bold text-xs uppercase text-slate-900 border-b pb-0.5">2. LUGAR DE LA OBRA.</h3>
-                    <p className="text-slate-500 italic text-[10px]">Nota1: Captura de imagen de la zona de la obra o descripción.</p>
+                    <h3 className="font-bold text-xs uppercase text-slate-900 border-b pb-0.5">2. LUGAR DE LA OBRA & PROGRAMA DE TRABAJOS.</h3>
+                    <p className="text-slate-500 italic text-[10px]">Nota1: Captura de imagen de la zona de la obra o detalle del programa semanal con estados.</p>
                     {lugarObraFotoUrl && (
                       <img src={lugarObraFotoUrl} alt="Lugar de Obra" className="w-full max-h-48 object-cover rounded-md border my-1" />
                     )}
-                    <p className="text-slate-700">{lugarObraTexto}</p>
+                    {lugarObraTexto && (lugarObraTexto.includes('<table') || lugarObraTexto.includes('<div')) ? (
+                      <div
+                        className="overflow-x-auto text-xs my-1"
+                        dangerouslySetInnerHTML={{ __html: lugarObraTexto }}
+                      />
+                    ) : (
+                      <p className="text-slate-700 text-xs whitespace-pre-line">{lugarObraTexto}</p>
+                    )}
                   </div>
 
                   {/* 3. FOTOS Y COMENTARIOS */}
@@ -1033,16 +1040,45 @@ export const InformesCRR: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block font-bold text-slate-700 mb-1">
-                          Descripción de la Ubicación / Sector
-                        </label>
-                        <textarea
-                          rows={3}
-                          value={lugarObraTexto}
-                          onChange={(e) => setLugarObraTexto(e.target.value)}
-                          placeholder="Sector, cota de altura, equipo industrial o área intervenida..."
-                          className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-sky-500"
-                        />
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block font-bold text-slate-700">
+                            {lugarObraTexto?.includes('<table')
+                              ? 'Programa Semanal / Tabla de Operaciones y Estados'
+                              : 'Descripción de la Ubicación / Sector'}
+                          </label>
+                          {lugarObraTexto?.includes('<table') && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">
+                              Mini Tabla con Estados Activa
+                            </span>
+                          )}
+                        </div>
+                        {lugarObraTexto?.includes('<table') ? (
+                          <div className="space-y-2">
+                            <div
+                              className="border border-slate-200 rounded-xl p-2 bg-slate-50/50 max-h-72 overflow-y-auto text-xs"
+                              dangerouslySetInnerHTML={{ __html: lugarObraTexto }}
+                            />
+                            <details className="text-[11px] text-slate-500 cursor-pointer">
+                              <summary className="font-semibold text-sky-600 hover:underline">
+                                Editar código / contenido HTML manualmente
+                              </summary>
+                              <textarea
+                                rows={5}
+                                value={lugarObraTexto}
+                                onChange={(e) => setLugarObraTexto(e.target.value)}
+                                className="w-full mt-1.5 p-2 bg-white border border-slate-300 rounded-xl font-mono text-[11px] focus:ring-2 focus:ring-sky-500"
+                              />
+                            </details>
+                          </div>
+                        ) : (
+                          <textarea
+                            rows={3}
+                            value={lugarObraTexto}
+                            onChange={(e) => setLugarObraTexto(e.target.value)}
+                            placeholder="Sector, cota de altura, equipo industrial o área intervenida..."
+                            className="w-full p-2.5 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-sky-500"
+                          />
+                        )}
                       </div>
                     </div>
                   )}

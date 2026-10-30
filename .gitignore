@@ -53,6 +53,7 @@ server/uploads/
 *.tmp
 *.xlsx
 *.xlsm
+WhatsApp Image*
 
 # Environment variables
 .env

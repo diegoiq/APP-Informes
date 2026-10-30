@@ -227,6 +227,16 @@ class ApiService {
     });
   }
 
+  public getDocumentoPSDownloadUrl(semana: number, anio: number, ptoTbjo: string = '340CRR') {
+    return `/api/programacion/arauco/documento/download?semana=${semana}&anio=${anio}&ptoTbjo=${encodeURIComponent(ptoTbjo)}`;
+  }
+
+  public deleteDocumentoPS(semana: number, anio: number, ptoTbjo: string = '340CRR', limpiarOperaciones: boolean = false) {
+    return this.request(`/programacion/arauco/documento?semana=${semana}&anio=${anio}&ptoTbjo=${encodeURIComponent(ptoTbjo)}&limpiarOperaciones=${limpiarOperaciones}`, {
+      method: 'DELETE'
+    });
+  }
+
   public updateDotacionArauco(data: any) {
     return this.request('/programacion/arauco/dotacion', {
       method: 'POST',

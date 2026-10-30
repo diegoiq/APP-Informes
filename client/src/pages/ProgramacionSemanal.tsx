@@ -23,7 +23,10 @@ import {
   Upload,
   Sparkles,
   Database,
-  Server
+  Server,
+  Download,
+  FileSpreadsheet,
+  AlertTriangle
 } from 'lucide-react';
 
 const DIAS = [
@@ -61,7 +64,15 @@ export const ProgramacionSemanal: React.FC = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
   const [syncingInforme, setSyncingInforme] = useState(false);
+  const [showDeleteDocModal, setShowDeleteDocModal] = useState(false);
+  const [deletingDoc, setDeletingDoc] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '0 KB';
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
 
   // Modal para agregar operación desde Backlog IW37N
   const [showAddModal, setShowAddModal] = useState(false);
@@ -123,7 +134,7 @@ export const ProgramacionSemanal: React.FC = () => {
     loadProgramacion();
   }, [semana, anio, ptoTbjo]);
 
-  // Subida de archivo PS...xlsm (semana actual o semanas anteriores)
+  // Subida de archivo PS...xlsm para la semana seleccionada
   const handleFileUpload = async (file: File) => {
     if (uploading) return;
     const ext = file.name.toLowerCase();
@@ -136,12 +147,16 @@ export const ProgramacionSemanal: React.FC = () => {
     setUploadSuccess(null);
     try {
       const res = await api.uploadPSFile(file, semana, anio);
+      const targetSem = res.summary.semana || semana;
+      const targetAn = res.summary.anio || anio;
+
       setUploadSuccess(
-        `Archivo ${file.name} importado en PS${res.summary.semana}${res.summary.anio} (${res.summary.totalOperaciones} operaciones | ${res.summary.hhDisponibles} HH disp. | ${res.summary.hhProgramadas} HH prog. | Densidad ${res.summary.densidad}%). Informe semanal PS${res.summary.semana}${res.summary.anio} ${res.summary.ptoTbjo} activo.`
+        `Documento "${file.name}" cargado y guardado con éxito en PS${targetSem}${targetAn} (${res.summary.totalOperaciones} operaciones | ${res.summary.hhProgramadas} HH programadas). Quedará persistido en el sistema.`
       );
-      if (res.summary.semana !== semana || res.summary.anio !== anio) {
-        setSemana(res.summary.semana);
-        setAnio(res.summary.anio);
+
+      if (targetSem !== semana || targetAn !== anio) {
+        setSemana(targetSem);
+        setAnio(targetAn);
       } else {
         await loadProgramacion();
       }
@@ -153,6 +168,22 @@ export const ProgramacionSemanal: React.FC = () => {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+    }
+  };
+
+  // Eliminación del documento oficial de la PS para liberar almacenamiento en Render
+  const handleDeleteDocumento = async (limpiarOps: boolean = false) => {
+    setDeletingDoc(true);
+    try {
+      const res = await api.deleteDocumentoPS(semana, anio, ptoTbjo, limpiarOps);
+      setUploadSuccess(res.message || `Documento de PS${semana}${anio} eliminado para liberar espacio en Render.`);
+      setShowDeleteDocModal(false);
+      await loadProgramacion();
+      setTimeout(() => setUploadSuccess(null), 6000);
+    } catch (err: any) {
+      alert(err.message || 'Error al eliminar documento');
+    } finally {
+      setDeletingDoc(false);
     }
   };
 
@@ -431,12 +462,16 @@ export const ProgramacionSemanal: React.FC = () => {
                 title="Seleccionar semana del Programa Semanal"
               >
                 {Array.from({ length: 52 }, (_, i) => i + 1).map((semNum) => {
-                  const isLoaded = (data?.semanasDisponibles || []).some(
+                  const semInfo = (data?.semanasDisponibles || []).find(
                     (s: any) => s.semana === semNum && s.anio === anio
                   );
+                  const hasDoc = Boolean(semInfo?.archivoNombre);
+                  const isCurrent = semNum === semana;
+                  const currentHasDoc = isCurrent && Boolean(data?.dotacion?.archivoNombre);
+                  const showDoc = hasDoc || currentHasDoc;
                   return (
                     <option key={semNum} value={semNum}>
-                      PS{semNum}{anio} (Sem. {semNum}){isLoaded ? ' ✓' : ''}
+                      PS{semNum}{anio} (Sem. {semNum}){showDoc ? ' 📎 Doc' : semInfo ? ' ✓' : ''}
                     </option>
                   );
                 })}
@@ -477,6 +512,7 @@ export const ProgramacionSemanal: React.FC = () => {
             <span className="text-slate-400 font-semibold">Semanas PS en servidor:</span>
             {data.semanasDisponibles.map((s: any) => {
               const active = s.semana === semana && s.anio === anio;
+              const hasDoc = Boolean(s.archivoNombre || (active && data?.dotacion?.archivoNombre));
               return (
                 <button
                   key={`${s.semana}-${s.anio}`}
@@ -485,13 +521,15 @@ export const ProgramacionSemanal: React.FC = () => {
                     setSemana(s.semana);
                     setAnio(s.anio);
                   }}
-                  className={`px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-lg font-bold transition cursor-pointer ${
                     active
-                      ? 'bg-sky-500 text-white shadow-sm'
+                      ? 'bg-sky-500 text-white shadow-sm ring-1 ring-white/30'
                       : 'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700'
                   }`}
+                  title={hasDoc ? `PS${s.semana}${s.anio}: Documento cargado (${s.archivoNombre || 'Excel guardado'})` : `PS${s.semana}${s.anio}`}
                 >
-                  PS{s.semana}{s.anio}
+                  <span>PS{s.semana}{s.anio}</span>
+                  {hasDoc && <span className="text-[10px] text-emerald-400">📎</span>}
                 </button>
               );
             })}
@@ -634,67 +672,156 @@ export const ProgramacionSemanal: React.FC = () => {
         </div>
       </div>
 
-      {/* Zona Drag & Drop para importar archivo oficial PS...xlsm (semana actual o semanas pasadas) */}
-      <div
-        onClick={() => !uploading && fileInputRef.current?.click()}
-        onDragEnter={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragging(true);
-        }}
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (!isDragging) setIsDragging(true);
-        }}
-        onDragLeave={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setIsDragging(false);
-        }}
-        onDrop={handleDrop}
-        className={`bg-white border-2 border-dashed rounded-2xl p-4 sm:p-5 transition shadow-sm relative group cursor-pointer ${
-          isDragging
-            ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-300'
-            : 'border-sky-300 hover:border-sky-500'
-        }`}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".xlsm,.xlsx,.xls,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleFileUpload(file);
-          }}
-          className="hidden"
-        />
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-none">
-          <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
-            <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-md group-hover:scale-105 transition shrink-0">
-              <UploadCloud className="w-5 h-5" />
+      {/* GESTIÓN Y VISUALIZACIÓN DE DOCUMENTO OFICIAL CARGADO EN LA PS (CON BORRADO PARA RENDER) */}
+      {data?.dotacion?.archivoNombre ? (
+        <div className="bg-white border-2 border-emerald-500/80 rounded-2xl p-4 sm:p-5 shadow-sm space-y-3 relative overflow-hidden">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+            <div className="flex items-start sm:items-center gap-3">
+              <div className="p-3 bg-emerald-100 text-emerald-800 rounded-xl shadow-sm shrink-0">
+                <FileSpreadsheet className="w-6 h-6 text-emerald-700" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                    DOCUMENTO GUARDADO EN PS{semana}{anio}
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    {data.dotacion.archivoFecha
+                      ? `Cargado: ${new Date(data.dotacion.archivoFecha).toLocaleDateString('es-CL')} ${new Date(data.dotacion.archivoFecha).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Activo en base de datos'}
+                  </span>
+                </div>
+                <h4 className="font-extrabold text-sm sm:text-base text-slate-900 break-words mt-1" title={data.dotacion.archivoNombre}>
+                  {data.dotacion.archivoNombre}
+                </h4>
+                <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5 flex-wrap">
+                  <span>Tamaño: <strong className="text-slate-700">{formatBytes(data.dotacion.archivoTamano)}</strong></span>
+                  <span>•</span>
+                  <span>Operaciones de la semana: <strong className="text-emerald-700 font-bold">{data?.operaciones?.length || 0} OTs</strong></span>
+                  <span>•</span>
+                  <span>HH Programadas: <strong className="text-sky-700 font-bold">{data?.horasProgramadas?.total || 0} HH</strong></span>
+                </div>
+              </div>
             </div>
-            <div>
-              <h4 className="font-bold text-xs sm:text-sm text-slate-800">
-                Arrastra aquí el archivo <span className="text-sky-700">PS{semana}{anio} 340CRR.xlsm</span> o cualquier PS de semanas anteriores
-              </h4>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                También puedes tocar para seleccionarlo desde tu celular o PC. Se importan todas las operaciones, dotación (H2:N2) y horas asignadas sin perder fotos ni comentarios de ninguna semana.
-              </p>
+
+            {/* Botones de acción: Descargar, Reemplazar y Borrar Documento */}
+            <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto shrink-0">
+              <a
+                href={api.getDocumentoPSDownloadUrl(semana, anio, ptoTbjo)}
+                download
+                className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+                title="Descargar archivo original .xlsm de esta semana"
+              >
+                <Download className="w-4 h-4" />
+                <span>Descargar</span>
+              </a>
+
+              <button
+                type="button"
+                onClick={() => !uploading && fileInputRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition cursor-pointer"
+                title="Cargar un nuevo archivo para actualizar esta semana"
+              >
+                <UploadCloud className="w-4 h-4 text-sky-600" />
+                <span>{uploading ? 'Importando...' : 'Reemplazar'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowDeleteDocModal(true)}
+                disabled={deletingDoc}
+                className="flex items-center gap-1.5 px-3 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                title="Eliminar documento para liberar espacio si suben los niveles de Render"
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+                <span>Borrar Doc (Render)</span>
+              </button>
             </div>
           </div>
-          {uploading ? (
-            <div className="flex items-center gap-1.5 text-xs font-bold text-sky-700 bg-sky-100 px-3 py-1.5 rounded-full animate-pulse shrink-0">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-              <span>Importando planilla PS...</span>
-            </div>
-          ) : (
-            <span className="px-3 py-1.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold shrink-0">
-              Seleccionar archivo .xlsm / .xlsx
+
+          <div className="flex items-center justify-between text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>El documento está guardado en el servidor para <strong>PS{semana}{anio}</strong>. Si en el futuro suben los niveles de Render, puedes borrar el archivo con el botón rojo para liberar almacenamiento.</span>
             </span>
-          )}
+            <span className="text-slate-400 font-mono text-[10px] hidden sm:inline">Puesto: {ptoTbjo}</span>
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsm,.xlsx,.xls,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileUpload(file);
+            }}
+            className="hidden"
+          />
         </div>
-      </div>
+      ) : (
+        /* Zona Drag & Drop para cuando no hay documento cargado en esta PS */
+        <div
+          onClick={() => !uploading && fileInputRef.current?.click()}
+          onDragEnter={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragging(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!isDragging) setIsDragging(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsDragging(false);
+          }}
+          onDrop={handleDrop}
+          className={`bg-white border-2 border-dashed rounded-2xl p-4 sm:p-5 transition shadow-sm relative group cursor-pointer ${
+            isDragging
+              ? 'border-emerald-500 bg-emerald-50/60 ring-2 ring-emerald-300'
+              : 'border-sky-300 hover:border-sky-500'
+          }`}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsm,.xlsx,.xls,application/vnd.ms-excel.sheet.macroEnabled.12,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleFileUpload(file);
+            }}
+            className="hidden"
+          />
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pointer-events-none">
+            <div className="flex flex-col sm:flex-row items-center gap-3 text-center sm:text-left">
+              <div className="p-2.5 bg-sky-600 text-white rounded-xl shadow-md group-hover:scale-105 transition shrink-0">
+                <UploadCloud className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-xs sm:text-sm text-slate-800">
+                  No hay documento cargado para <span className="text-sky-700">PS{semana}{anio}</span>. Arrastra aquí la planilla oficial
+                </h4>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Selecciona el archivo Excel <span className="font-semibold text-slate-700">PS{semana}{anio} 340CRR.xlsm</span> de esta semana para importarlo y guardarlo en el sistema.
+                </p>
+              </div>
+            </div>
+            {uploading ? (
+              <div className="flex items-center gap-1.5 text-xs font-bold text-sky-700 bg-sky-100 px-3 py-1.5 rounded-full animate-pulse shrink-0">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                <span>Importando y guardando planilla PS{semana}...</span>
+              </div>
+            ) : (
+              <span className="px-3 py-1.5 bg-sky-50 text-sky-700 border border-sky-200 rounded-xl text-xs font-bold shrink-0">
+                Adjuntar archivo .xlsm / .xlsx
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Panel de Control de Dotación y Capacidad Neta Semanal */}
       <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-6 shadow-sm space-y-4">
@@ -1476,6 +1603,73 @@ export const ProgramacionSemanal: React.FC = () => {
                 className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
               >
                 Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación para borrar documento de la PS y liberar espacio en Render */}
+      {showDeleteDocModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-5 space-y-4 border border-slate-200 animate-in fade-in duration-150">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5 text-red-600 font-extrabold text-base">
+                <AlertTriangle className="w-5 h-5" />
+                <span>Gestión de Almacenamiento en Render</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDeleteDocModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              El documento <strong className="text-slate-800">{data?.dotacion?.archivoNombre}</strong> está guardado de forma permanente en la base de datos de <strong>PS{semana}{anio}</strong>. Si en el futuro suben los niveles de uso de Render o deseas liberar espacio, elige cómo proceder:
+            </p>
+
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={() => handleDeleteDocumento(false)}
+                disabled={deletingDoc}
+                className="w-full text-left p-3.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 transition cursor-pointer group"
+              >
+                <div className="flex items-center justify-between font-bold text-xs text-amber-900">
+                  <span>1. Solo borrar archivo Excel guardado</span>
+                  <span className="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-extrabold">Recomendado</span>
+                </div>
+                <p className="text-[11px] text-amber-800 mt-1">
+                  Elimina los bytes del archivo Excel de la base de datos para liberar espacio en Render inmediatamente. <strong>Las operaciones cargadas e informes de esta semana se conservan intactos.</strong>
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDeleteDocumento(true)}
+                disabled={deletingDoc}
+                className="w-full text-left p-3.5 rounded-xl border border-red-200 bg-red-50 hover:bg-red-100 transition cursor-pointer group"
+              >
+                <div className="font-bold text-xs text-red-900">
+                  2. Borrar documento Y limpiar operaciones de la semana
+                </div>
+                <p className="text-[11px] text-red-800 mt-1">
+                  Elimina el archivo Excel y desvincula las operaciones de PS{semana}{anio}, dejando la semana vacía para volver a cargarla desde cero.
+                </p>
+              </button>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowDeleteDocModal(false)}
+                disabled={deletingDoc}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition cursor-pointer"
+              >
+                Cancelar
               </button>
             </div>
           </div>
