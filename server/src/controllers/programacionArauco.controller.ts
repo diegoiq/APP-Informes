@@ -176,10 +176,16 @@ export class ProgramacionAraucoController {
       }
     });
 
-    const operaciones = await prisma.operacionOM.findMany({
+    const operacionesRaw = await prisma.operacionOM.findMany({
       where: {
         semanaProg: semana,
         anioProg: anio,
+        activo: true,
+        NOT: [
+          { numeroOrden: { contains: 'Opci' } },
+          { numeroOrden: { contains: 'Duraci' } },
+          { numeroOperacion: { contains: 'Opci' } }
+        ],
         ...(ptoTbjo
           ? {
               OR: [
@@ -191,6 +197,11 @@ export class ProgramacionAraucoController {
           : {})
       },
       orderBy: [{ numeroOrden: 'asc' }, { numeroOperacion: 'asc' }]
+    });
+
+    const operaciones = operacionesRaw.filter((o) => {
+      const ord = String(o.numeroOrden || '').trim();
+      return !/opci/i.test(ord) && !/duraci/i.test(ord) && /\d{4,12}/.test(ord);
     });
 
     const jornada = dotacion?.horasJornada || 7;
@@ -401,9 +412,15 @@ export class ProgramacionAraucoController {
         ? dotacionesMes.map((d) => d.semana)
         : todasDotaciones.map((d) => d.semana);
 
-    const operacionesMes = await prisma.operacionOM.findMany({
+    const operacionesMesRaw = await prisma.operacionOM.findMany({
       where: {
         anioProg: anio,
+        activo: true,
+        NOT: [
+          { numeroOrden: { contains: 'Opci' } },
+          { numeroOrden: { contains: 'Duraci' } },
+          { numeroOperacion: { contains: 'Opci' } }
+        ],
         ...(semanasDelMes.length > 0 ? { semanaProg: { in: semanasDelMes } } : { semanaProg: { not: null } }),
         ...(ptoTbjo
           ? {
@@ -416,6 +433,11 @@ export class ProgramacionAraucoController {
           : {})
       },
       orderBy: [{ semanaProg: 'asc' }, { numeroOrden: 'asc' }, { numeroOperacion: 'asc' }]
+    });
+
+    const operacionesMes = operacionesMesRaw.filter((o) => {
+      const ord = String(o.numeroOrden || '').trim();
+      return !/opci/i.test(ord) && !/duraci/i.test(ord) && /\d{4,12}/.test(ord);
     });
 
     const hhProgTotalMes = operacionesMes.reduce((acc, o) => acc + o.hhTotalProgramado, 0);
@@ -615,22 +637,65 @@ export class ProgramacionAraucoController {
         });
       }
 
-      // 2. Obtener operaciones asignadas a esta semana (asegurando estado activo)
+      // 1. Purgar definitivamente cualquier fila espuria previa de cabecera (ej: "Opción: Duración/Horas Hombres")
+      try {
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM operaciones_om WHERE numero_orden ILIKE '%Opci%' OR numero_orden ILIKE '%Duraci%' OR numero_operacion ILIKE '%Opci%'`
+        );
+      } catch {
+        try {
+          await prisma.operacionOM.updateMany({
+            where: {
+              OR: [
+                { numeroOrden: { contains: 'Opci' } },
+                { numeroOrden: { contains: 'Duraci' } },
+                { numeroOperacion: { contains: 'Opci' } }
+              ]
+            },
+            data: {
+              semanaProg: null,
+              anioProg: null,
+              hhMiercoles: 0,
+              hhJueves: 0,
+              hhViernes: 0,
+              hhSabado: 0,
+              hhDomingo: 0,
+              hhLunes: 0,
+              hhMartes: 0,
+              hhTotalProgramado: 0,
+              activo: false
+            }
+          });
+        } catch {}
+      }
+
+      // 2. Asegurar que las operaciones legítimas de esta semana (con dígitos numéricos) estén activas
       try {
         await prisma.operacionOM.updateMany({
           where: {
             semanaProg: semana,
             anioProg: anio,
-            activo: false
+            activo: false,
+            NOT: [
+              { numeroOrden: { contains: 'Opci' } },
+              { numeroOrden: { contains: 'Duraci' } },
+              { numeroOperacion: { contains: 'Opci' } }
+            ]
           },
           data: { activo: true }
         });
       } catch {}
 
-      const operaciones = await prisma.operacionOM.findMany({
+      const operacionesRaw = await prisma.operacionOM.findMany({
         where: {
           semanaProg: semana,
           anioProg: anio,
+          activo: true,
+          NOT: [
+            { numeroOrden: { contains: 'Opci' } },
+            { numeroOrden: { contains: 'Duraci' } },
+            { numeroOperacion: { contains: 'Opci' } }
+          ],
           ...(ptoTbjo
             ? {
                 OR: [
@@ -655,6 +720,14 @@ export class ProgramacionAraucoController {
             }
           }
         }
+      });
+
+      // Filtro estricto: solo considerar operaciones legítimas de Arauco (con número de OT numérico)
+      const operaciones = operacionesRaw.filter((o) => {
+        const ord = String(o.numeroOrden || '').trim();
+        const op = String(o.numeroOperacion || '').trim();
+        if (/opci/i.test(ord) || /duraci/i.test(ord) || /opci/i.test(op)) return false;
+        return /\d{4,12}/.test(ord);
       });
 
       // 3. Cálculos diarios y totales

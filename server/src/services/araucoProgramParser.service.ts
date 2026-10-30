@@ -425,16 +425,37 @@ export class AraucoProgramParserService {
 
     const operacionesExtraidas = Array.from(operacionesMap.values());
 
-    // 4.1 Limpiar registros corruptos o textos de cabecera erróneos previos (ej: "Opción: Duración/Horas Hombres")
+    // 4.1 Purgar definitivamente registros espurios o textos de cabecera erróneos previos (ej: "Opción: Duración/Horas Hombres")
     try {
-      await prisma.operacionOM.deleteMany({
-        where: {
-          semanaProg: semana,
-          anioProg: anio,
-          numeroOrden: { contains: 'Opción' }
-        }
-      });
-    } catch {}
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM operaciones_om WHERE numero_orden ILIKE '%Opci%' OR numero_orden ILIKE '%Duraci%' OR numero_operacion ILIKE '%Opci%'`
+      );
+    } catch {
+      try {
+        await prisma.operacionOM.updateMany({
+          where: {
+            OR: [
+              { numeroOrden: { contains: 'Opci' } },
+              { numeroOrden: { contains: 'Duraci' } },
+              { numeroOperacion: { contains: 'Opci' } }
+            ]
+          },
+          data: {
+            semanaProg: null,
+            anioProg: null,
+            hhMiercoles: 0,
+            hhJueves: 0,
+            hhViernes: 0,
+            hhSabado: 0,
+            hhDomingo: 0,
+            hhLunes: 0,
+            hhMartes: 0,
+            hhTotalProgramado: 0,
+            activo: false
+          }
+        });
+      } catch {}
+    }
 
     // 4.2 Desasignar operaciones previas de esta misma semana que ya no estén en el archivo Excel subido
     const keysNuevas = new Set<string>();
@@ -558,12 +579,17 @@ export class AraucoProgramParserService {
       }
     }
 
-    // Auto-recuperación: asegurar que todas las operaciones de esta semana tengan activo = true
+    // Auto-recuperación: asegurar que todas las operaciones legítimas de esta semana tengan activo = true
     try {
       await prisma.operacionOM.updateMany({
         where: {
           semanaProg: semana,
-          anioProg: anio
+          anioProg: anio,
+          NOT: [
+            { numeroOrden: { contains: 'Opci' } },
+            { numeroOrden: { contains: 'Duraci' } },
+            { numeroOperacion: { contains: 'Opci' } }
+          ]
         },
         data: { activo: true }
       });
@@ -572,7 +598,16 @@ export class AraucoProgramParserService {
     debugLogs.push(`[6] Guardado en BD: ${guardadasOk} operaciones guardadas con éxito, ${guardadasErr} con error.${errorsList.length > 0 ? ' Detalle errores: ' + errorsList.join(' | ') : ''}`);
 
     const totalEnBd = await prisma.operacionOM.count({
-      where: { semanaProg: semana, anioProg: anio, activo: true }
+      where: {
+        semanaProg: semana,
+        anioProg: anio,
+        activo: true,
+        NOT: [
+          { numeroOrden: { contains: 'Opci' } },
+          { numeroOrden: { contains: 'Duraci' } },
+          { numeroOperacion: { contains: 'Opci' } }
+        ]
+      }
     });
     debugLogs.push(`[7] Verificación final en BD: ${totalEnBd} operaciones activas registradas para Semana ${semana}/${anio}`);
 
