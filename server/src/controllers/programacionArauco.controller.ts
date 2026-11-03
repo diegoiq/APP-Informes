@@ -673,55 +673,7 @@ export class ProgramacionAraucoController {
         });
       }
 
-      // 1. Purgar definitivamente cualquier fila espuria previa de cabecera (ej: "Opción: Duración/Horas Hombres")
-      try {
-        await prisma.$executeRawUnsafe(
-          `DELETE FROM operaciones_om WHERE numero_orden ILIKE '%Opci%' OR numero_orden ILIKE '%Duraci%' OR numero_operacion ILIKE '%Opci%'`
-        );
-      } catch {
-        try {
-          await prisma.operacionOM.updateMany({
-            where: {
-              OR: [
-                { numeroOrden: { contains: 'Opci' } },
-                { numeroOrden: { contains: 'Duraci' } },
-                { numeroOperacion: { contains: 'Opci' } }
-              ]
-            },
-            data: {
-              semanaProg: null,
-              anioProg: null,
-              hhMiercoles: 0,
-              hhJueves: 0,
-              hhViernes: 0,
-              hhSabado: 0,
-              hhDomingo: 0,
-              hhLunes: 0,
-              hhMartes: 0,
-              hhTotalProgramado: 0,
-              activo: false
-            }
-          });
-        } catch {}
-      }
-
-      // 2. Asegurar que las operaciones legítimas de esta semana (con dígitos numéricos) estén activas
-      try {
-        await prisma.operacionOM.updateMany({
-          where: {
-            semanaProg: semana,
-            anioProg: anio,
-            activo: false,
-            NOT: [
-              { numeroOrden: { contains: 'Opci' } },
-              { numeroOrden: { contains: 'Duraci' } },
-              { numeroOperacion: { contains: 'Opci' } }
-            ]
-          },
-          data: { activo: true }
-        });
-      } catch {}
-
+      // 1. Filtrar filas legítimas de operaciones (excluyendo cabeceras residuales)
       const operacionesRaw = await prisma.operacionOM.findMany({
         where: {
           semanaProg: semana,
@@ -809,20 +761,24 @@ export class ProgramacionAraucoController {
       const [informeSemanal, informeMensual] = await Promise.all([
         prisma.informeCRR.findUnique({
           where: { codigoInforme: codigoPS },
-          include: {
-            fotos: true,
-            responsable: {
-              select: { id: true, nombre: true, email: true }
-            }
+          select: {
+            id: true,
+            codigoInforme: true,
+            titulo: true,
+            tipoInforme: true,
+            estado: true,
+            fechaElaboracion: true
           }
         }),
         prisma.informeCRR.findUnique({
           where: { codigoInforme: codigoMensual },
-          include: {
-            fotos: true,
-            responsable: {
-              select: { id: true, nombre: true, email: true }
-            }
+          select: {
+            id: true,
+            codigoInforme: true,
+            titulo: true,
+            tipoInforme: true,
+            estado: true,
+            fechaElaboracion: true
           }
         })
       ]);
