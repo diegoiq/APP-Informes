@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { compressImage } from '../services/imageCompressor';
 import {
   X,
   Camera,
@@ -107,26 +108,26 @@ export const ModalRelevamientoPS: React.FC<ModalRelevamientoPSProps> = ({
   // Cálculo en tiempo real de Horas Hombre
   const totalHH = Number((horasEstimadas * operarios).toFixed(1));
 
-  // Manejo de carga de archivos de imagen a Base64
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Manejo de carga de archivos de imagen a Base64 con compresión automática
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
+    for (const file of Array.from(files)) {
       if (!file.type.startsWith('image/')) {
         alert('Solo se admiten archivos de imagen (.jpg, .png, .webp).');
-        return;
+        continue;
       }
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        if (base64) {
-          setFotos((prev) => [...prev, base64]);
+      try {
+        const compressed = await compressImage(file, 1024, 1024, 100 * 1024);
+        if (compressed) {
+          setFotos((prev) => [...prev, compressed]);
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (err) {
+        console.error('Error comprimiendo imagen en relevamiento:', err);
+      }
+    }
   };
 
   const handleRemovePhoto = (index: number) => {

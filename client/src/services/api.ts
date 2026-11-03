@@ -31,7 +31,14 @@ class ApiService {
     const data = await res.json().catch(() => null);
 
     if (!res.ok) {
-      const errorMsg = data?.message || data?.error || `Error ${res.status}: ${res.statusText}`;
+      let errorMsg = `Error ${res.status}: ${res.statusText}`;
+      if (data?.message && data?.error && data.message !== data.error) {
+        errorMsg = `${data.message} (${data.error})`;
+      } else if (data?.message) {
+        errorMsg = data.message;
+      } else if (data?.error) {
+        errorMsg = data.error;
+      }
       throw new Error(errorMsg);
     }
 

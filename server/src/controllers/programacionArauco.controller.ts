@@ -160,12 +160,22 @@ export class ProgramacionAraucoController {
   ) {
     const codigoPS = `PS${semana}${anio} ${ptoTbjo}`;
 
-    // Buscar usuario responsable (el actual o el primer admin/usuario activo)
+    // Buscar usuario responsable (el actual o el primer admin/usuario activo) con validación
     let responsableId = userId;
+    if (responsableId) {
+      const userExiste = await prisma.usuario.findUnique({
+        where: { id: responsableId },
+        select: { id: true }
+      }).catch(() => null);
+      if (!userExiste) {
+        responsableId = undefined;
+      }
+    }
     if (!responsableId) {
       const firstUser = await prisma.usuario.findFirst({
-        orderBy: { creadoEn: 'asc' }
-      });
+        orderBy: { creadoEn: 'asc' },
+        select: { id: true }
+      }).catch(() => null);
       if (!firstUser) return null;
       responsableId = firstUser.id;
     }
@@ -329,14 +339,15 @@ export class ProgramacionAraucoController {
               create: fotosParaInforme
             }
           },
-          include: {
-            fotos: true,
-            responsable: {
-              select: { id: true, nombre: true, email: true }
-            }
+          select: {
+            id: true,
+            codigoInforme: true,
+            titulo: true,
+            tipoInforme: true,
+            estado: true
           }
         });
-      });
+      }, { timeout: 30000, maxWait: 15000 });
       return actualizado;
     } else {
       const creado = await prisma.informeCRR.create({
@@ -360,11 +371,12 @@ export class ProgramacionAraucoController {
             create: fotosParaInforme
           }
         },
-        include: {
-          fotos: true,
-          responsable: {
-            select: { id: true, nombre: true, email: true }
-          }
+        select: {
+          id: true,
+          codigoInforme: true,
+          titulo: true,
+          tipoInforme: true,
+          estado: true
         }
       });
       return creado;
@@ -390,8 +402,20 @@ export class ProgramacionAraucoController {
     const codigoMensual = `INF-MES-${String(mes).padStart(2, '0')}-${anio} ${ptoTbjo}`;
 
     let responsableId = userId;
+    if (responsableId) {
+      const userExiste = await prisma.usuario.findUnique({
+        where: { id: responsableId },
+        select: { id: true }
+      }).catch(() => null);
+      if (!userExiste) {
+        responsableId = undefined;
+      }
+    }
     if (!responsableId) {
-      const firstUser = await prisma.usuario.findFirst({ orderBy: { creadoEn: 'asc' } });
+      const firstUser = await prisma.usuario.findFirst({
+        orderBy: { creadoEn: 'asc' },
+        select: { id: true }
+      }).catch(() => null);
       if (!firstUser) return null;
       responsableId = firstUser.id;
     }
@@ -544,9 +568,15 @@ export class ProgramacionAraucoController {
               create: fotosParaInformeMes
             }
           },
-          include: { fotos: true }
+          select: {
+            id: true,
+            codigoInforme: true,
+            titulo: true,
+            tipoInforme: true,
+            estado: true
+          }
         });
-      });
+      }, { timeout: 30000, maxWait: 15000 });
     } else {
       return await prisma.informeCRR.create({
         data: {
@@ -569,7 +599,13 @@ export class ProgramacionAraucoController {
             create: fotosParaInformeMes
           }
         },
-        include: { fotos: true }
+        select: {
+          id: true,
+          codigoInforme: true,
+          titulo: true,
+          tipoInforme: true,
+          estado: true
+        }
       });
     }
   }
@@ -1039,16 +1075,29 @@ export class ProgramacionAraucoController {
       const anio = opActualizada.anioProg || 2026;
       const ptoTbjo = opActualizada.ptoTbjo || '340CRR';
 
-      // Sincronizar automáticamente con el Informe de Trabajos de la Semana y con el Informe Mensual Consolidado
+      // Obtener mes correspondiente a la semana de la operación
       const dot = await prisma.dotacionSemanalArauco.findUnique({
         where: { semana_anio_ptoTbjo: { semana, anio, ptoTbjo } }
-      });
+      }).catch(() => null);
       const mesOp = dot?.fechaInicio ? new Date(dot.fechaInicio).getUTCMonth() + 1 : new Date().getMonth() + 1;
 
-      const [informeSemanal, informeMensual] = await Promise.all([
-        ProgramacionAraucoController.syncInformeSemanal(semana, anio, ptoTbjo, req.user?.id),
-        ProgramacionAraucoController.syncInformeMensual(mesOp, anio, ptoTbjo, req.user?.id)
-      ]);
+      // Sincronizar automáticamente con el Informe de Trabajos de la Semana y con el Informe Mensual Consolidado (tolerante a fallos)
+      let informeSemanal: any = null;
+      let informeMensual: any = null;
+      try {
+        [informeSemanal, informeMensual] = await Promise.all([
+          ProgramacionAraucoController.syncInformeSemanal(semana, anio, ptoTbjo, req.user?.id).catch((err) => {
+            console.error('Error sincronizando informe semanal tras guardar evidencia:', err);
+            return null;
+          }),
+          ProgramacionAraucoController.syncInformeMensual(mesOp, anio, ptoTbjo, req.user?.id).catch((err) => {
+            console.error('Error sincronizando informe mensual tras guardar evidencia:', err);
+            return null;
+          })
+        ]);
+      } catch (syncErr) {
+        console.error('Error general en sincronización background de informes tras guardar evidencia:', syncErr);
+      }
 
       return res.json({
         message: `Evidencia guardada y unida al Informe Semanal (PS${semana}${anio}) y al Informe Mensual (${String(mesOp).padStart(2, '0')}/${anio}).`,
@@ -1059,8 +1108,10 @@ export class ProgramacionAraucoController {
     } catch (error: any) {
       console.error('Error al guardar evidencia de operación PS:', error);
       return res.status(500).json({
-        message: 'Error al guardar evidencia en la línea del PS',
-        error: error.message
+        message: error?.message
+          ? `Error al guardar evidencia en la línea del PS: ${error.message}`
+          : 'Error al guardar evidencia en la línea del PS',
+        error: error?.message || String(error)
       });
     }
   }

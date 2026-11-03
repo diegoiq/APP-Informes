@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import { compressImage } from '../services/imageCompressor';
 import {
   CalendarDays,
   UploadCloud,
@@ -320,23 +321,22 @@ export const ProgramacionSemanal: React.FC = () => {
     setFotosEjecucion(parseOpFotos(op));
   };
 
-  // Subir fotos a Base64 dentro del modal de la línea del PS (evitando duplicados)
-  const handleLinePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Subir fotos comprimidas a Base64 dentro del modal de la línea del PS (evitando duplicados y sobrecarga)
+  const handleLinePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith('image/')) return;
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        if (base64) {
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) continue;
+      try {
+        const compressedBase64 = await compressImage(file, 1024, 1024, 100 * 1024);
+        if (compressedBase64) {
           setFotosEjecucion((prev) => {
-            if (prev.some((f) => f.url === base64)) return prev;
+            if (prev.some((f) => f.url === compressedBase64)) return prev;
             return [
               ...prev,
               {
-                url: base64,
+                url: compressedBase64,
                 etapa: 'Comentario',
                 comentario: '',
                 fecha: new Date().toISOString()
@@ -344,9 +344,10 @@ export const ProgramacionSemanal: React.FC = () => {
             ];
           });
         }
-      };
-      reader.readAsDataURL(file);
-    });
+      } catch (err) {
+        console.error('Error procesando imagen de evidencia:', err);
+      }
+    }
     e.target.value = '';
   };
 
@@ -355,10 +356,25 @@ export const ProgramacionSemanal: React.FC = () => {
     if (!selectedOpEvidencia) return;
     setSavingEvidencia(true);
     try {
+      // Optimizar cualquier foto pendiente antes de enviar (asegurar máximo 100 KB por foto)
+      const fotosOptimizadas = await Promise.all(
+        fotosEjecucion.map(async (item) => {
+          if (item.url && item.url.startsWith('data:image/') && item.url.length > 130000) {
+            try {
+              const comp = await compressImage(item.url, 1024, 1024, 100 * 1024);
+              return { ...item, url: comp };
+            } catch {
+              return item;
+            }
+          }
+          return item;
+        })
+      );
+
       const res = await api.guardarEvidenciaOperacionArauco(selectedOpEvidencia.id, {
         estadoEjecucion,
         comentariosEjecucion,
-        fotosEjecucion
+        fotosEjecucion: fotosOptimizadas
       });
       setUploadSuccess(res.message);
       setSelectedOpEvidencia(null);

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
+import { compressImage } from '../services/imageCompressor';
 import SignatureCanvas from 'react-signature-canvas';
 import {
   FileText,
@@ -158,26 +159,32 @@ export const InformesCRR: React.FC = () => {
     }
   };
 
-  // Manejo de carga de foto del Lugar de la Obra (Cámara o Galería)
-  const handleLugarObraUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Manejo de carga de foto del Lugar de la Obra (Cámara o Galería) con compresión (máx 100 KB)
+  const handleLugarObraUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setLugarObraFotoUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const comp = await compressImage(file, 1024, 1024, 100 * 1024);
+      if (comp) setLugarObraFotoUrl(comp);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (event) => setLugarObraFotoUrl(event.target?.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
-  // Manejo de carga de foto para Fotos y Comentarios (Cámara o Galería)
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Manejo de carga de foto para Fotos y Comentarios (Cámara o Galería) con compresión (máx 100 KB)
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setTempFotoUrl(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const comp = await compressImage(file, 1024, 1024, 100 * 1024);
+      if (comp) setTempFotoUrl(comp);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (event) => setTempFotoUrl(event.target?.result as string);
+      reader.readAsDataURL(file);
+    }
   };
 
   // Agregar foto a la lista (sin duplicados por URL)
@@ -209,18 +216,25 @@ export const InformesCRR: React.FC = () => {
     setFotosList((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Manejo de fotos de Anexos
-  const handleAnexoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Manejo de fotos de Anexos con compresión (máx 100 KB)
+  const handleAnexoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const base64 = event.target?.result as string;
-      if (base64) {
-        setAnexosFotosList((prev) => (prev.includes(base64) ? prev : [...prev, base64]));
+    try {
+      const comp = await compressImage(file, 1024, 1024, 100 * 1024);
+      if (comp) {
+        setAnexosFotosList((prev) => (prev.includes(comp) ? prev : [...prev, comp]));
       }
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        if (base64) {
+          setAnexosFotosList((prev) => (prev.includes(base64) ? prev : [...prev, base64]));
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleRemoveAnexo = (index: number) => {
