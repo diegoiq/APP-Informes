@@ -50,6 +50,8 @@ server/prisma/*.db-journal
 # Uploads and temporary storage
 uploads/
 server/uploads/
+backups/
+backup/
 *.tmp
 *.xlsx
 *.xlsm

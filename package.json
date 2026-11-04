@@ -19,6 +19,8 @@
     "prisma:generate": "npm run prisma:generate --workspace=server",
     "prisma:migrate": "npm run prisma:migrate --workspace=server",
     "prisma:seed": "npm run prisma:seed --workspace=server",
+    "backup:render": "npm run backup:render --workspace=server",
+    "restore:backup": "npm run restore:backup --workspace=server",
     "generate:sample-excel": "npm run generate:sample-excel --workspace=server"
   },
   "devDependencies": {

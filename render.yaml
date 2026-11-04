@@ -3,14 +3,6 @@
 # https://render.com/docs/blueprint-spec
 # =====================================================================
 
-databases:
-  # Base de Datos PostgreSQL Gestionada (Capa Gratuita de Render)
-  - name: app-informes-db
-    databaseName: app_informes
-    user: app_informes_user
-    plan: free
-    region: oregon
-
 services:
   # Plataforma Web Unificada (Backend API + Frontend React SPA)
   - type: web
@@ -29,9 +21,9 @@ services:
       - key: PORT
         value: 10000
       - key: DATABASE_URL
-        fromDatabase:
-          name: app-informes-db
-          property: connectionString
+        sync: false
+      - key: DIRECT_URL
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
