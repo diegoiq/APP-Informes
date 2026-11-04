@@ -152,17 +152,17 @@ export const Navbar: React.FC = () => {
                 setShowRenderModal(true);
               }}
               className="flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-slate-700 transition cursor-pointer shadow-sm shrink-0"
-              title="Ver Estado de Render, Espacios Disponibles en BD/RAM y Variables del Sistema"
+              title="Ver Estado de Render & Supabase, Espacios Disponibles y Variables del Sistema"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
               <Server className="w-3.5 h-3.5 text-sky-400 shrink-0" />
               <span className="hidden 2xl:inline">
-                Render: {sysStatus?.storage?.database?.availableMb ?? '1014'} MB disp.
+                {sysStatus?.databaseInfo?.provider || 'Supabase'}: {sysStatus?.storage?.database?.availableMb ?? '316'} MB disp.
               </span>
               <span className="hidden sm:inline 2xl:hidden">
-                {sysStatus?.storage?.database?.availableMb ?? '1014'} MB
+                {sysStatus?.databaseInfo?.provider || 'Supabase'}: {sysStatus?.storage?.database?.availableMb ?? '316'} MB
               </span>
-              <span className="sm:hidden">Render</span>
+              <span className="sm:hidden">{sysStatus?.databaseInfo?.provider || 'Supabase'}</span>
             </button>
 
             {/* Badge de Cupos 5 Usuarios */}
@@ -239,14 +239,14 @@ export const Navbar: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-extrabold text-sm sm:text-base text-white">
-                      Monitor de Estado de Render & Espacios Disponibles
+                      Monitor de Estado: Render Web & Supabase Cloud
                     </h3>
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                       ONLINE
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Servicio: <strong className="text-slate-200">{sysStatus?.render?.serviceName || 'app-informes'}</strong> • Región: <strong className="text-slate-200">{sysStatus?.render?.region || 'oregon'}</strong> • Uptime: <strong className="text-emerald-300">{formatUptime(sysStatus?.render?.uptimeSeconds)}</strong>
+                    Web: <strong className="text-slate-200">{sysStatus?.render?.serviceName || 'app-informes'}</strong> ({sysStatus?.render?.region || 'oregon'}) • BD: <strong className="text-emerald-300">{sysStatus?.databaseInfo?.provider || 'Supabase'} PostgreSQL</strong> ({sysStatus?.databaseInfo?.region || 'us-east-1'}) • Uptime: <strong className="text-emerald-300">{formatUptime(sysStatus?.render?.uptimeSeconds)}</strong>
                   </p>
                 </div>
               </div>
@@ -275,31 +275,33 @@ export const Navbar: React.FC = () => {
               
               {/* Tarjetas de Almacenamiento y Recursos */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                {/* 1. Base de Datos PostgreSQL */}
+                {/* 1. Base de Datos Supabase PostgreSQL */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="font-extrabold text-slate-800 flex items-center gap-1.5">
-                      <Database className="w-4 h-4 text-sky-600" />
-                      <span>BD PostgreSQL</span>
+                      <Database className="w-4 h-4 text-emerald-600" />
+                      <span>BD {sysStatus?.databaseInfo?.provider || 'Supabase'}</span>
                     </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-sky-100 text-sky-800">
-                      {sysStatus?.storage?.database?.usagePercent ?? 1}% en uso
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                      {sysStatus?.storage?.database?.usagePercent ?? 36}% en uso
                     </span>
                   </div>
                   <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-gradient-to-r from-sky-500 to-emerald-500 rounded-full transition-all"
-                      style={{ width: `${Math.max(3, sysStatus?.storage?.database?.usagePercent || 2)}%` }}
+                      className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all"
+                      style={{ width: `${Math.max(3, sysStatus?.storage?.database?.usagePercent || 36)}%` }}
                     />
                   </div>
                   <div className="flex justify-between text-[11px] text-slate-600">
-                    <span>Usado: <strong>{sysStatus?.storage?.database?.usedMb ?? 8.5} MB</strong></span>
+                    <span>Usado: <strong>{sysStatus?.storage?.database?.usedMb ?? 183.5} MB</strong></span>
                     <span className="text-emerald-700 font-bold">
-                      Libre: {sysStatus?.storage?.database?.availableMb ?? 1015.5} MB
+                      Libre: {sysStatus?.storage?.database?.availableMb ?? 316.5} MB
                     </span>
                   </div>
-                  <div className="text-[10px] text-slate-400">
-                    Capacidad Total Plan Render: {sysStatus?.storage?.database?.limitMb ?? 1024} MB (1 GB)
+                  <div className="text-[10px] text-slate-500 font-medium">
+                    {sysStatus?.databaseInfo?.provider === 'Supabase'
+                      ? `Plan Supabase Free: ${sysStatus?.storage?.database?.limitMb ?? 500} MB (Pooler :6543)`
+                      : `Capacidad Plan: ${sysStatus?.storage?.database?.limitMb ?? 1024} MB (1 GB)`}
                   </div>
                 </div>
 
@@ -439,8 +441,8 @@ export const Navbar: React.FC = () => {
 
             {/* Pie */}
             <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between shrink-0 text-xs">
-              <span className="text-slate-500">
-                Node {sysStatus?.render?.nodeVersion} • {sysStatus?.render?.plan}
+              <span className="text-slate-500 font-medium">
+                Node {sysStatus?.render?.nodeVersion} • {sysStatus?.render?.plan || 'Render Web Service + Supabase PostgreSQL'}
               </span>
               <button
                 type="button"

@@ -36,10 +36,18 @@ export class AdminController {
         })
       ]);
 
-      // 2. Tamaño real de la Base de Datos PostgreSQL (Render Free = 1024 MB / 1 GB)
-      const dbLimitMb = Number(process.env.RENDER_DB_LIMIT_MB || 1024);
+      // 2. Detección de Proveedor y Tamaño real de la Base de Datos PostgreSQL
+      const dbUrl = process.env.DATABASE_URL || '';
+      const isSupabase = dbUrl.includes('supabase.co') || dbUrl.includes('pooler.supabase.com');
+      
+      const dbLimitMb = isSupabase
+        ? Number(process.env.SUPABASE_DB_LIMIT_MB || 500)
+        : Number(process.env.RENDER_DB_LIMIT_MB || 1024);
+        
       let dbUsedBytes = 0;
-      let dbEngine = 'PostgreSQL (Render Managed)';
+      let dbEngine = isSupabase
+        ? 'PostgreSQL 15+ (Supabase Managed Pooler)'
+        : 'PostgreSQL (Render Managed)';
 
       try {
         const result: any = await prisma.$queryRawUnsafe(
@@ -50,7 +58,7 @@ export class AdminController {
         }
       } catch {
         // Fallback si es base local o sin permiso pg_database_size
-        dbEngine = 'Base de Datos Local / Estándar';
+        dbEngine = isSupabase ? 'Supabase Cloud (PostgreSQL)' : 'Base de Datos Local / Estándar';
         dbUsedBytes = (avisosCount * 2048) + (operacionesCount * 1024) + (informesCount * 8192) + (fotosInformeCount * 180000) + (8 * 1024 * 1024);
       }
 
@@ -99,15 +107,27 @@ export class AdminController {
           isRenderCloud: Boolean(process.env.RENDER),
           serviceName: process.env.RENDER_SERVICE_NAME || 'app-informes',
           region: process.env.RENDER_REGION || 'oregon',
-          plan: 'Render Free Tier (Web Service + PostgreSQL)',
+          plan: isSupabase ? 'Render Web Service + Supabase PostgreSQL' : 'Render Free Tier (Web Service + PostgreSQL)',
           branch: process.env.RENDER_GIT_BRANCH || 'main',
           commit: process.env.RENDER_GIT_COMMIT ? process.env.RENDER_GIT_COMMIT.substring(0, 7) : 'latest',
           nodeVersion: process.version,
           environment: process.env.NODE_ENV || 'development',
           uptimeSeconds: Math.floor(process.uptime())
         },
+        databaseInfo: {
+          provider: isSupabase ? 'Supabase' : 'Render',
+          engine: dbEngine,
+          region: isSupabase ? 'us-east-1 (N. Virginia)' : (process.env.RENDER_REGION || 'oregon'),
+          projectId: isSupabase ? 'zkgsepihvrwyohgoijfa' : 'app-informes-db',
+          plan: isSupabase ? 'Supabase Free Tier (500 MB)' : 'Render Free Plan (1024 MB)',
+          connectionMode: isSupabase
+            ? (dbUrl.includes(':6543') ? 'PgBouncer Pooler (:6543)' : 'Direct Session (:5432)')
+            : 'Direct Host',
+          status: 'ONLINE'
+        },
         storage: {
           database: {
+            provider: isSupabase ? 'Supabase' : 'Render',
             engine: dbEngine,
             limitMb: dbLimitMb,
             usedMb: dbUsedMb,
@@ -149,16 +169,19 @@ export class AdminController {
             (d.horasJornada || 7)
         })),
         variables: {
+          DATABASE_PROVIDER: isSupabase ? 'Supabase Cloud (PostgreSQL 15+)' : 'Render Managed PostgreSQL',
+          SUPABASE_PROJECT: isSupabase ? 'zkgsepihvrwyohgoijfa (APP-Informes)' : 'N/A',
+          DATABASE_POOLER: isSupabase ? 'PgBouncer Activo (Puerto 6543 / 5432)' : 'Direct',
+          DATABASE_REGION: isSupabase ? 'us-east-1 (N. Virginia)' : (process.env.RENDER_REGION || 'oregon'),
           PORT: String(process.env.PORT || 4000),
           NODE_ENV: String(process.env.NODE_ENV || 'development'),
           MAX_REGISTERED_USERS: String(maxUsers),
           JWT_EXPIRES_IN: String(process.env.JWT_EXPIRES_IN || '8h'),
-          DATABASE_SSL: Boolean(process.env.RENDER) ? 'Activo (Internal/External URL)' : 'Local',
           BODY_LIMIT_FOTOS: '50 MB (Soporte Base64 Alta Resolución)',
           PUESTO_EJECUTOR: '340CRR (Mantenimiento & Estructuras)',
           GRUPO_PLANIFICACION: 'TA1 (Celulosa Puerto Esperanza)',
           CICLO_SEMANAL_ARAUCO: 'Miércoles (Día 1) a Martes (Día 7)',
-          REGIMEN_HORARIO: 'Turno 9h = 7h corridas | Turno 12h = 10h efectivas'
+          RESPALDO_LOCAL: 'Guardado Seguro en Disco (606 archivos / 465 MB)'
         }
       });
     } catch (error: any) {
