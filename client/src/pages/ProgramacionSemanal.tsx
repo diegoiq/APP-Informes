@@ -1414,6 +1414,25 @@ export const ProgramacionSemanal: React.FC = () => {
                         {op.ubicacionTecnica || 'AR-PLANTA-CRR'}
                       </td>
                       <td className="py-2.5 px-4 font-medium text-slate-900 max-w-xs">
+                        <div className="flex items-center gap-1.5 flex-wrap mb-0.5">
+                          {(() => {
+                            const txt = (op.textoOperacion || '').toLowerCase();
+                            const esSol =
+                              /^(sol|sold)[-_\s:]/i.test(op.textoOperacion) ||
+                              op.statusSistema?.includes('SOLDAD') ||
+                              op.aviso?.rubro?.toLowerCase().includes('sold') ||
+                              /\b(estruct|soldadura|cañer|piping|calder|plancha|viga|metal|baranda)\b/i.test(txt);
+                            return esSol ? (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                                ⚡ SOL
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-sky-100 text-sky-900 border border-sky-300">
+                                🏗️ CIV
+                              </span>
+                            );
+                          })()}
+                        </div>
                         <div className="truncate font-semibold" title={op.textoOperacion}>
                           {op.textoOperacion}
                         </div>

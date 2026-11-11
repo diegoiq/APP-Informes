@@ -2,32 +2,59 @@ import { Request, Response } from 'express';
 import prisma from '../database/db';
 import { ProgramacionAraucoController } from './programacionArauco.controller';
 
-// Palabras clave para clasificar tareas si no tienen rubro explícito en Aviso
-const SOLDADOR_KEYWORDS = /soldad|soldar|calder|plancha|tuber|piping|valvul|corte|plasma|mig|tig|viga|metal|chapa|oxigen|estructura\s*met/i;
-const CIVIL_KEYWORDS = /civil|hormig|cemento|loseta|baldosa|rejilla|pintur|esmalte|epoxi|albanil|albañil|vereda|canaleta|desague|desagüe|mamposter|piso|techo|drenaje|proteccion|protección/i;
+// 1. REGLA 1: Prefijos oficiales explícitos de la planilla Arauco (Máxima prioridad)
+// Ejemplos: "CIV- Caida de escombros", "CIV-Drenaje Sala", "SOL-Estruct canaleta Catedral", "SOL- ..."
+const REGEX_PREFIX_CIVIL = /^(civ|civil)[-_\s:]|\b(civ|civil)[-_\s:]/i;
+const REGEX_PREFIX_SOLDADOR = /^(sol|sold|soldador)[-_\s:]|\b(sol|sold|soldador)[-_\s:]/i;
 
-function clasificarOperacion(op: any): 'soldador' | 'civil' | 'ambos' {
-  const rubro = (op.aviso?.rubro || '').toLowerCase();
+// 2. REGLA 2: Diccionario Técnico Industrial Arauco (para tareas sin prefijo explícito)
+// Términos estrictos de Obras Civiles:
+// - H°A° / HºAº / HOA (Hormigón Armado como en: "Insp y rel estado tapas de H°A° Secado")
+// - Hormigón, cemento, losetas, baldosas, escombros, drenajes, filtraciones, tapas, albañilería, rejillas, pintura, epoxi, veredas, mampostería, techos, goteras, sellados
+const DICCIONARIO_CIVIL = /\b(h[°ºo]\.?a[°ºo]?|hormig[oó]n|cemento|loseta|losetas|baldosa|baldosas|escombro|escombros|drenaje|drenajes|filtraci[oó]n|filtraciones|tapa|tapas|albañil|albanil|albañiler[ií]a|rejilla|rejillas|sellado|sellador|pintura|pintar|esmalte|epoxi|vereda|veredas|desag[uü]e|desagues|mamposter[ií]a|piso|pisos|techo|techos|gotera|goteras|fisura|fisuras|grieta|grietas|revoque|impermeabiliz|mortero|canaleta\s*pluvial|cerramiento|cerramientos)\b/i;
+
+// Términos estrictos de Soldadura / Metalúrgica / Piping:
+// - Estructuras, canaleta catedral, cañerías, tuberías, piping, calderería, planchas, corte plasma/oxígeno, electrodo, mig, tig, vigas, perfiles metálicos, chapas, soportes, barandas, pasarelas, escaleras, válvulas, bridas, injertos, refuerzos metálicos, tolvas, ductos
+const DICCIONARIO_SOLDADOR = /\b(estruct|estructura|estructuras|estructural|canaleta\s*catedral|cañer[ií]a|cañerias|tuber[ií]a|tuberias|piping|calderer[ií]a|caldera|calderas|plancha|planchas|planchuela|planchuelas|corte|plasma|ox[ií]geno|oxicorte|electrodo|electrodos|mig|tig|viga|vigas|perfil|perfiles|chapa|chapas|metal|met[aá]lic[ao]s?|soporte|soportes|soporter[ií]a|baranda|barandas|barandilla|pasarela|pasarelas|escalera\s*gato|escalera\s*marina|v[aá]lvula|valvulas|brida|bridas|injerto|injertos|reforzar|refuerzo\s*met|tolva|tolvas|ducto|ductos|soldar|soldadura|soldador)\b/i;
+
+function clasificarOperacion(op: any): 'soldador' | 'civil' {
   const status = (op.statusSistema || '').toLowerCase();
-  const texto = (op.textoOperacion || '').toLowerCase();
+  const rubro = (op.aviso?.rubro || '').toLowerCase();
+  const texto = (op.textoOperacion || '').trim();
 
-  // 1. Si fue creada en terreno con un rubro marcado
-  if (status.includes('soldad') || rubro.includes('soldad') || rubro.includes('cañer') || rubro.includes('piping') || rubro.includes('mecanic')) {
+  // Paso 1: Si fue asignada o cambiada explícitamente en el sistema
+  if (status.includes('soldad') || status.includes('cuadrilla_soldador')) return 'soldador';
+  if (status.includes('civil') || status.includes('cuadrilla_civil')) return 'civil';
+
+  // Paso 2: Prefijos oficiales de la planilla ("CIV-" o "SOL-")
+  if (REGEX_PREFIX_SOLDADOR.test(texto)) {
     return 'soldador';
   }
-  if (status.includes('civil') || rubro.includes('civil') || rubro.includes('pintur') || rubro.includes('aislac') || rubro.includes('albanil') || rubro.includes('hormig')) {
+  if (REGEX_PREFIX_CIVIL.test(texto)) {
     return 'civil';
   }
 
-  // 2. Por texto descriptivo de la operación
-  const matchesSoldador = SOLDADOR_KEYWORDS.test(texto);
-  const matchesCivil = CIVIL_KEYWORDS.test(texto);
+  // Paso 3: Diccionario técnico especializado
+  const matchesSoldador = DICCIONARIO_SOLDADOR.test(texto);
+  const matchesCivil = DICCIONARIO_CIVIL.test(texto);
 
   if (matchesSoldador && !matchesCivil) return 'soldador';
   if (matchesCivil && !matchesSoldador) return 'civil';
 
-  // Si no coincide o coincide con ambos, se clasifica según el rubro o queda accesible
-  return 'ambos';
+  // Paso 4: Desempatar por el rubro del Aviso si existe
+  if (rubro.includes('soldad') || rubro.includes('cañer') || rubro.includes('piping') || rubro.includes('mecanic')) {
+    return 'soldador';
+  }
+  if (rubro.includes('civil') || rubro.includes('pintur') || rubro.includes('aislac') || rubro.includes('albanil') || rubro.includes('hormig')) {
+    return 'civil';
+  }
+
+  // Paso 5: Si no tiene ninguna palabra ni prefijo:
+  // Si contiene palabras con raíz metálica va a soldador, sino por defecto civil (340CRR es Puesto Civil/Estructuras)
+  if (/metal|chapa|tubo|valv|viga|perfil|acero|sold/i.test(texto)) {
+    return 'soldador';
+  }
+  return 'civil';
 }
 
 function formatearRangoFechas(fechaInicio?: Date | null, fechaFin?: Date | null): string {
@@ -265,12 +292,12 @@ export class OperariosController {
         };
       });
 
-      // Filtrar por especialidad estricta
+      // Filtrar por especialidad estricta (Separación absoluta Civil vs Soldador)
       let filtradas = procesadas;
       if (especialidad === 'civil') {
-        filtradas = procesadas.filter((t) => t.categoria === 'civil' || t.categoria === 'ambos');
+        filtradas = procesadas.filter((t) => t.categoria === 'civil');
       } else if (especialidad === 'soldador') {
-        filtradas = procesadas.filter((t) => t.categoria === 'soldador' || t.categoria === 'ambos');
+        filtradas = procesadas.filter((t) => t.categoria === 'soldador');
       }
 
       // Filtrar por búsqueda de texto
@@ -543,6 +570,79 @@ export class OperariosController {
       return res.json(filtrados);
     } catch (error: any) {
       return res.status(500).json({ message: 'Error al obtener personal', error: error.message });
+    }
+  }
+
+  /**
+   * Permite reasignar una tarea a la otra cuadrilla (Civil <-> Soldador)
+   */
+  public static async cambiarCuadrilla(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { nuevaEspecialidad, operarioNombre = 'Usuario' } = req.body; // 'civil' | 'soldador'
+
+      if (!nuevaEspecialidad || !['civil', 'soldador'].includes(nuevaEspecialidad)) {
+        return res.status(400).json({ message: 'Especialidad inválida. Debe ser civil o soldador.' });
+      }
+
+      const op = await prisma.operacionOM.findUnique({
+        where: { id },
+        include: { aviso: true }
+      });
+
+      if (!op) {
+        return res.status(404).json({ message: 'Tarea no encontrada.' });
+      }
+
+      const esSold = nuevaEspecialidad === 'soldador';
+      const statusNuevo = esSold ? 'CUADRILLA_SOLDADOR' : 'CUADRILLA_CIVIL';
+      const rubroNuevo = esSold ? 'Soldador' : 'Civil';
+
+      // Ajustar prefijo en texto si tenía el contrario
+      let nuevoTexto = op.textoOperacion;
+      if (esSold) {
+        if (/^civ[-_\s:]/i.test(nuevoTexto)) {
+          nuevoTexto = nuevoTexto.replace(/^civ[-_\s:]/i, 'SOL- ');
+        } else if (!/^sol[-_\s:]/i.test(nuevoTexto)) {
+          nuevoTexto = `SOL- ${nuevoTexto}`;
+        }
+      } else {
+        if (/^sol[-_\s:]/i.test(nuevoTexto)) {
+          nuevoTexto = nuevoTexto.replace(/^sol[-_\s:]/i, 'CIV- ');
+        } else if (!/^civ[-_\s:]/i.test(nuevoTexto)) {
+          nuevoTexto = `CIV- ${nuevoTexto}`;
+        }
+      }
+
+      const fechaCorta = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+      const notaReasig = `[${fechaCorta}] Reasignada a cuadrilla ${rubroNuevo} por ${operarioNombre}`;
+      const nuevoComentario = op.comentariosEjecucion
+        ? `${op.comentariosEjecucion}\n${notaReasig}`
+        : notaReasig;
+
+      const updated = await prisma.operacionOM.update({
+        where: { id },
+        data: {
+          textoOperacion: nuevoTexto,
+          statusSistema: statusNuevo,
+          comentariosEjecucion: nuevoComentario,
+          ...(op.avisoId && {
+            aviso: {
+              update: {
+                rubro: rubroNuevo
+              }
+            }
+          })
+        }
+      });
+
+      return res.json({
+        success: true,
+        message: `Tarea reasignada a ${rubroNuevo}.`,
+        tarea: updated
+      });
+    } catch (error: any) {
+      return res.status(500).json({ message: 'Error al cambiar cuadrilla', error: error.message });
     }
   }
 }

@@ -89,6 +89,7 @@ router.post('/admin/clean-demo', authMiddleware as any, AdminController.cleanDem
 router.get('/operarios/info-semana', OperariosController.getInfoSemana);
 router.get('/operarios/tareas', OperariosController.getTareas);
 router.post('/operarios/tareas/:id/evidencia', OperariosController.guardarEvidencia);
+router.post('/operarios/tareas/:id/cambiar-cuadrilla', OperariosController.cambiarCuadrilla);
 router.post('/operarios/tareas/nueva', OperariosController.crearTareaNueva);
 router.get('/operarios/personal', OperariosController.getPersonal);
 

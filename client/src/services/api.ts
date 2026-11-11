@@ -402,6 +402,13 @@ class ApiService {
     });
   }
 
+  public cambiarCuadrillaTarea(id: string, nuevaEspecialidad: 'civil' | 'soldador', operarioNombre?: string) {
+    return this.request(`/operarios/tareas/${id}/cambiar-cuadrilla`, {
+      method: 'POST',
+      body: JSON.stringify({ nuevaEspecialidad, operarioNombre })
+    });
+  }
+
   public getOperariosPersonal(especialidad?: string) {
     const q = especialidad ? `?especialidad=${encodeURIComponent(especialidad)}` : '';
     return this.request(`/operarios/personal${q}`);

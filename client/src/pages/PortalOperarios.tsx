@@ -310,6 +310,20 @@ export const PortalOperarios: React.FC = () => {
     }
   };
 
+  const handleReasignarCuadrilla = async (tarea: TareaOperario) => {
+    const destino = isSoldador ? 'Obras Civiles' : 'Soldadores';
+    const nuevaEsp = isSoldador ? 'civil' : 'soldador';
+    if (!window.confirm(`¿Reasignar la tarea "OT ${tarea.numeroOrden}" al equipo de ${destino}?`)) {
+      return;
+    }
+    try {
+      await api.cambiarCuadrillaTarea(tarea.id, nuevaEsp, operarioNombre || 'Operario');
+      await cargarTareas();
+    } catch (err: any) {
+      alert(err.message || 'Error al reasignar cuadrilla');
+    }
+  };
+
   const isSoldador = especialidad === 'soldador';
 
   // Semana activa en pantalla
@@ -612,6 +626,13 @@ export const PortalOperarios: React.FC = () => {
                         }`}>
                           OT {tarea.numeroOrden}
                         </span>
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase ${
+                          tarea.categoria === 'soldador'
+                            ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                            : 'bg-sky-400/20 text-sky-300 border border-sky-400/30'
+                        }`}>
+                          {tarea.categoria === 'soldador' ? '⚡ SOL' : '🏗️ CIV'}
+                        </span>
                         <span className="px-2 py-0.5 rounded-md font-mono font-bold text-[11px] bg-slate-800 text-slate-400">
                           Op. {tarea.numeroOperacion}
                         </span>
@@ -694,7 +715,7 @@ export const PortalOperarios: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Botón táctil grande para subir fotos */}
+                    {/* Botón táctil grande para subir fotos y botón de reasignar cuadrilla */}
                     <div className="pt-2 flex items-center gap-2">
                       <button
                         onClick={() => handleAbrirModalFoto(tarea, 'Durante')}
@@ -706,6 +727,18 @@ export const PortalOperarios: React.FC = () => {
                       >
                         <Camera className="w-4 h-4" />
                         <span>Subir Fotos de Evidencia</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleReasignarCuadrilla(tarea)}
+                        className="p-3 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 border border-slate-700 rounded-xl transition cursor-pointer shrink-0"
+                        title={`Mover tarea a ${isSoldador ? 'Obras Civiles' : 'Soldadores'}`}
+                      >
+                        {isSoldador ? (
+                          <Building2 className="w-4 h-4 text-sky-400" />
+                        ) : (
+                          <Flame className="w-4 h-4 text-amber-400" />
+                        )}
                       </button>
                     </div>
                   </div>
