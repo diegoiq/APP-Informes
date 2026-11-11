@@ -393,6 +393,8 @@ class ApiService {
     operarioNombre: string;
     comentario?: string;
     fotoInicial?: string;
+    semana?: number;
+    anio?: number;
   }) {
     return this.request('/operarios/tareas/nueva', {
       method: 'POST',

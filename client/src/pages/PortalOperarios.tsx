@@ -14,18 +14,20 @@ import {
   CheckCircle2,
   AlertCircle,
   Calendar,
+  CalendarDays,
   Sparkles,
   Flame,
   Building2,
   RefreshCw,
   User,
   ArrowLeft,
+  ChevronLeft,
   ChevronRight,
   Maximize2,
   Check
 } from 'lucide-react';
 
-interface FotoItem {
+export interface FotoItem {
   url: string;
   etapa?: string;
   comentario?: string;
@@ -33,7 +35,15 @@ interface FotoItem {
   operario?: string;
 }
 
-interface TareaOperario {
+export interface SemanaItem {
+  semana: number;
+  anio: number;
+  label: string;
+  rangoFechas: string;
+  esActual: boolean;
+}
+
+export interface TareaOperario {
   id: string;
   numeroOrden: string;
   numeroOperacion: string;
@@ -61,7 +71,7 @@ export const PortalOperarios: React.FC = () => {
     return localStorage.getItem('operario_nombre') || '';
   });
 
-  // Información de la semana en curso
+  // Información de la semana en curso y lista de semanas disponibles
   const [infoSemana, setInfoSemana] = useState<{
     semana: number;
     anio: number;
@@ -69,6 +79,10 @@ export const PortalOperarios: React.FC = () => {
     rangoFechas: string;
     totalTareas: number;
   } | null>(null);
+
+  const [semanasDisponibles, setSemanasDisponibles] = useState<SemanaItem[]>([]);
+  const [semanaSeleccionada, setSemanaSeleccionada] = useState<{ semana: number; anio: number } | null>(null);
+  const [showModalSemanas, setShowModalSemanas] = useState(false);
 
   // Lista de tareas y filtros
   const [tareas, setTareas] = useState<TareaOperario[]>([]);
@@ -124,15 +138,21 @@ export const PortalOperarios: React.FC = () => {
     cargarPersonal();
   }, []);
 
-  // Cargar tareas al cambiar especialidad o semana
+  // Cargar tareas al cambiar especialidad o semana seleccionada
   useEffect(() => {
     cargarTareas();
-  }, [especialidad]);
+  }, [especialidad, semanaSeleccionada]);
 
   const cargarInfoSemana = async () => {
     try {
       const res = await api.getOperariosInfoSemana();
       setInfoSemana(res);
+      if (res?.semanasDisponibles && Array.isArray(res.semanasDisponibles)) {
+        setSemanasDisponibles(res.semanasDisponibles);
+      }
+      if (!semanaSeleccionada && res?.semana && res?.anio) {
+        setSemanaSeleccionada({ semana: res.semana, anio: res.anio });
+      }
     } catch (err) {
       console.error('Error cargando info semana:', err);
     }
@@ -152,7 +172,9 @@ export const PortalOperarios: React.FC = () => {
     try {
       const res = await api.getOperariosTareas({
         especialidad,
-        search
+        search,
+        semana: semanaSeleccionada?.semana,
+        anio: semanaSeleccionada?.anio
       });
       if (res && Array.isArray(res.tareas)) {
         setTareas(res.tareas);
@@ -259,7 +281,9 @@ export const PortalOperarios: React.FC = () => {
         numeroOrden: nuevaOrden.trim() || undefined,
         operarioNombre: operarioNombre || `Operario ${nuevaEsp}`,
         comentario: nuevaComentario.trim() || undefined,
-        fotoInicial: nuevaFotoInicial || undefined
+        fotoInicial: nuevaFotoInicial || undefined,
+        semana: semanaSeleccionada?.semana,
+        anio: semanaSeleccionada?.anio
       });
 
       // Limpiar formulario y cerrar modal
@@ -277,7 +301,6 @@ export const PortalOperarios: React.FC = () => {
       ) {
         await cargarTareas();
       } else {
-        // Si creó una de la otra especialidad, sugerir cambiar o recargar
         setEspecialidad(nuevaEsp === 'Soldador' ? 'soldador' : 'civil');
       }
     } catch (err: any) {
@@ -288,6 +311,27 @@ export const PortalOperarios: React.FC = () => {
   };
 
   const isSoldador = especialidad === 'soldador';
+
+  // Semana activa en pantalla
+  const semanaSeleccionadaItem =
+    semanasDisponibles.find(
+      (s) => s.semana === semanaSeleccionada?.semana && s.anio === semanaSeleccionada?.anio
+    ) ||
+    (infoSemana
+      ? {
+          semana: infoSemana.semana,
+          anio: infoSemana.anio,
+          label: `Semana ${infoSemana.semana} (${infoSemana.anio})`,
+          rangoFechas: infoSemana.rangoFechas,
+          esActual: true
+        }
+      : null);
+
+  const currentIndexSemana = semanasDisponibles.findIndex(
+    (s) => s.semana === semanaSeleccionada?.semana && s.anio === semanaSeleccionada?.anio
+  );
+  const puedeIrAnterior = currentIndexSemana >= 0 && currentIndexSemana < semanasDisponibles.length - 1;
+  const puedeIrSiguiente = currentIndexSemana > 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans pb-12">
@@ -349,24 +393,102 @@ export const PortalOperarios: React.FC = () => {
 
       {/* Contenedor Principal */}
       <main className="max-w-3xl mx-auto w-full px-4 pt-4 space-y-4 flex-1">
-        {/* Banner de Semana en Curso */}
-        <div className="bg-gradient-to-r from-slate-900 to-slate-850 rounded-2xl border border-slate-800 p-4 shadow-sm">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        {/* Banner de Semana con Selector Interactivo */}
+        <div className="bg-gradient-to-r from-slate-900 to-slate-850 rounded-2xl border border-slate-800 p-4 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             <div>
-              <div className="flex items-center gap-1.5 text-xs text-sky-400 font-bold uppercase tracking-wide">
+              <div className="flex items-center gap-2 text-xs text-sky-400 font-bold uppercase tracking-wide flex-wrap">
                 <Calendar className="w-3.5 h-3.5" />
-                <span>{infoSemana?.tituloSemana || 'Tareas de la Semana en Curso'}</span>
+                <span>
+                  {semanaSeleccionadaItem?.esActual
+                    ? 'Tareas de la Semana en Curso'
+                    : `Tareas de la Semana ${semanaSeleccionadaItem?.semana || ''}`}
+                </span>
+                {semanaSeleccionadaItem?.esActual ? (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    🟢 Semana Actual
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    ⏳ Otra Semana
+                  </span>
+                )}
               </div>
-              <h2 className="text-lg sm:text-xl font-black text-white mt-0.5">
-                {infoSemana?.rangoFechas || 'Ciclo Miércoles a Martes'}
+              <h2 className="text-lg sm:text-xl font-black text-white mt-1 flex items-center gap-2 flex-wrap">
+                <span>{semanaSeleccionadaItem?.label || `Semana ${infoSemana?.semana || 44} (${infoSemana?.anio || 2026})`}</span>
+                <span className="text-xs sm:text-sm font-semibold text-slate-400 font-mono">
+                  • {semanaSeleccionadaItem?.rangoFechas || infoSemana?.rangoFechas || 'Ciclo Miércoles a Martes'}
+                </span>
               </h2>
             </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <span className="px-3 py-1 bg-slate-800 border border-slate-700 rounded-full text-xs font-bold text-slate-300">
-                {tareasFiltradas.length} {tareasFiltradas.length === 1 ? 'tarea' : 'tareas'} {isSoldador ? 'metalúrgicas' : 'civiles'}
+
+            <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+              <span className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-xl text-xs font-bold text-slate-300">
+                {tareasFiltradas.length} {tareasFiltradas.length === 1 ? 'tarea' : 'tareas'}
               </span>
+
+              {/* Botón selector de semana */}
+              <button
+                type="button"
+                onClick={() => setShowModalSemanas(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-extrabold transition shadow-md cursor-pointer"
+              >
+                <CalendarDays className="w-4 h-4" />
+                <span>Elegir Semana ▾</span>
+              </button>
             </div>
           </div>
+
+          {/* Selector rápido anterior / siguiente */}
+          {semanasDisponibles.length > 1 && (
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-xs">
+              <button
+                type="button"
+                disabled={!puedeIrAnterior}
+                onClick={() => {
+                  if (puedeIrAnterior) {
+                    const target = semanasDisponibles[currentIndexSemana + 1];
+                    setSemanaSeleccionada({ semana: target.semana, anio: target.anio });
+                  }
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition ${
+                  puedeIrAnterior
+                    ? 'text-slate-300 hover:bg-slate-800 cursor-pointer'
+                    : 'text-slate-600 cursor-not-allowed opacity-50'
+                }`}
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Semana Anterior</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowModalSemanas(true)}
+                className="text-[11px] text-sky-400 font-semibold hover:underline"
+              >
+                Ver todas ({semanasDisponibles.length})
+              </button>
+
+              <button
+                type="button"
+                disabled={!puedeIrSiguiente}
+                onClick={() => {
+                  if (puedeIrSiguiente) {
+                    const target = semanasDisponibles[currentIndexSemana - 1];
+                    setSemanaSeleccionada({ semana: target.semana, anio: target.anio });
+                  }
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg transition ${
+                  puedeIrSiguiente
+                    ? 'text-slate-300 hover:bg-slate-800 cursor-pointer'
+                    : 'text-slate-600 cursor-not-allowed opacity-50'
+                }`}
+              >
+                <span>Semana Siguiente</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Selector de Especialidad: Civil vs Soldador */}
@@ -450,7 +572,7 @@ export const PortalOperarios: React.FC = () => {
               <p className="text-xs text-slate-400 max-w-sm mx-auto">
                 {search
                   ? `No hay tareas en ${isSoldador ? 'Soldadura' : 'Civiles'} que coincidan con "${search}".`
-                  : `No hay tareas programadas para el equipo de ${isSoldador ? 'Soldadores' : 'Obras Civiles'} en esta semana.`}
+                  : `No hay tareas para el equipo de ${isSoldador ? 'Soldadores' : 'Obras Civiles'} en ${semanaSeleccionadaItem?.label || 'esta semana'}.`}
               </p>
             </div>
             <button
@@ -461,7 +583,7 @@ export const PortalOperarios: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-xl text-xs font-bold transition"
             >
               <Plus className="w-4 h-4 text-sky-400" />
-              <span>Reportar la primera tarea aquí</span>
+              <span>Reportar tarea para esta semana</span>
             </button>
           </div>
         ) : (
@@ -1054,9 +1176,89 @@ export const PortalOperarios: React.FC = () => {
           />
         </div>
       )}
+
+      {/* ======================================================== */}
+      {/* MODAL 5: SELECCIONAR OTRA SEMANA                         */}
+      {/* ======================================================== */}
+      {showModalSemanas && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-t-3xl sm:rounded-2xl w-full max-w-sm max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-200">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-5 h-5 text-sky-400" />
+                <div>
+                  <h3 className="font-extrabold text-sm text-white">Elegir Semana</h3>
+                  <p className="text-[11px] text-slate-400">Ver tareas de semanas pasadas o futuras</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowModalSemanas(false)}
+                className="p-1.5 rounded-xl bg-slate-800 text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3 overflow-y-auto space-y-2 flex-1">
+              {semanasDisponibles.map((sem) => {
+                const isSelected =
+                  semanaSeleccionada?.semana === sem.semana &&
+                  semanaSeleccionada?.anio === sem.anio;
+
+                return (
+                  <button
+                    key={`${sem.anio}-${sem.semana}`}
+                    type="button"
+                    onClick={() => {
+                      setSemanaSeleccionada({ semana: sem.semana, anio: sem.anio });
+                      setShowModalSemanas(false);
+                    }}
+                    className={`w-full text-left p-3 rounded-xl border flex items-center justify-between text-xs transition cursor-pointer ${
+                      isSelected
+                        ? 'bg-sky-950/80 border-sky-500 text-white ring-1 ring-sky-500'
+                        : 'bg-slate-850 hover:bg-slate-800 border-slate-800 text-slate-300'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-black text-sm flex items-center gap-1.5">
+                        <span>{sem.label}</span>
+                        {sem.esActual && (
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            Semana Actual
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-slate-400 mt-0.5 font-mono">
+                        {sem.rangoFechas}
+                      </div>
+                    </div>
+                    {isSelected && <Check className="w-5 h-5 text-sky-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="p-3 border-t border-slate-800 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const actual = semanasDisponibles.find((s) => s.esActual) || semanasDisponibles[0];
+                  if (actual) {
+                    setSemanaSeleccionada({ semana: actual.semana, anio: actual.anio });
+                  }
+                  setShowModalSemanas(false);
+                }}
+                className="w-full py-2.5 px-3 bg-slate-800 hover:bg-slate-700 text-sky-300 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Volver a la Semana Actual</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default PortalOperarios;
-

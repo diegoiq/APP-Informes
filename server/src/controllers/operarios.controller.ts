@@ -40,29 +40,106 @@ function formatearRangoFechas(fechaInicio?: Date | null, fechaFin?: Date | null)
 
 export class OperariosController {
   /**
-   * Obtiene metadatos de la semana en curso (fechas legibles, número de semana y año)
+   * Obtiene metadatos de la semana en curso y lista de semanas disponibles para selección
    */
   public static async getInfoSemana(req: Request, res: Response) {
     try {
       const ptoTbjo = String(req.query.ptoTbjo || '340CRR').trim();
 
-      // Buscar la dotación / semana más reciente cargada
-      const ultimaDotacion = await prisma.dotacionSemanalArauco.findFirst({
+      // 1. Semanas registradas en dotaciones
+      const dotaciones = await prisma.dotacionSemanalArauco.findMany({
         where: { ptoTbjo },
-        orderBy: [{ anio: 'desc' }, { semana: 'desc' }]
+        orderBy: [{ anio: 'desc' }, { semana: 'desc' }],
+        select: {
+          semana: true,
+          anio: true,
+          fechaInicio: true,
+          fechaFin: true
+        }
       });
 
-      const now = new Date();
-      const semana = ultimaDotacion?.semana || 44;
-      const anio = ultimaDotacion?.anio || 2026;
-      const fechaInicio = ultimaDotacion?.fechaInicio || new Date(anio, 10, 4);
-      const fechaFin = ultimaDotacion?.fechaFin || new Date(anio, 10, 10);
+      // 2. Semanas distintas presentes en operaciones
+      const opsSemanas = await prisma.operacionOM.findMany({
+        where: { activo: true, semanaProg: { not: null } },
+        distinct: ['semanaProg', 'anioProg'],
+        select: { semanaProg: true, anioProg: true }
+      });
 
-      // Contar tareas de la semana
+      // Unificar semanas
+      const mapaSemanas = new Map<string, { semana: number; anio: number; fechaInicio?: Date; fechaFin?: Date }>();
+
+      for (const d of dotaciones) {
+        mapaSemanas.set(`${d.anio}-${d.semana}`, {
+          semana: d.semana,
+          anio: d.anio,
+          fechaInicio: d.fechaInicio,
+          fechaFin: d.fechaFin
+        });
+      }
+
+      for (const op of opsSemanas) {
+        if (op.semanaProg && op.anioProg) {
+          const key = `${op.anioProg}-${op.semanaProg}`;
+          if (!mapaSemanas.has(key)) {
+            const base = new Date(Date.UTC(op.anioProg, 0, 1));
+            const offsetDays = (op.semanaProg - 1) * 7;
+            const fIni = new Date(base.getTime() + (offsetDays + 2) * 86400000);
+            const fFin = new Date(fIni.getTime() + 6 * 86400000);
+            mapaSemanas.set(key, {
+              semana: op.semanaProg,
+              anio: op.anioProg,
+              fechaInicio: fIni,
+              fechaFin: fFin
+            });
+          }
+        }
+      }
+
+      // Si no hubiera semanas cargadas, asegurar un rango razonable
+      if (mapaSemanas.size === 0) {
+        const anioDef = 2026;
+        for (let s = 43; s <= 46; s++) {
+          const base = new Date(Date.UTC(anioDef, 0, 1));
+          const offsetDays = (s - 1) * 7;
+          const fIni = new Date(base.getTime() + (offsetDays + 2) * 86400000);
+          const fFin = new Date(fIni.getTime() + 6 * 86400000);
+          mapaSemanas.set(`${anioDef}-${s}`, {
+            semana: s,
+            anio: anioDef,
+            fechaInicio: fIni,
+            fechaFin: fFin
+          });
+        }
+      }
+
+      // Ordenar descendente (más recientes primero)
+      const listaSemanas = Array.from(mapaSemanas.values()).sort((a, b) => {
+        if (a.anio !== b.anio) return b.anio - a.anio;
+        return b.semana - a.semana;
+      });
+
+      const semanaActual = listaSemanas[0]?.semana || 44;
+      const anioActual = listaSemanas[0]?.anio || 2026;
+      const fechaInicioActual = listaSemanas[0]?.fechaInicio || new Date(anioActual, 10, 4);
+      const fechaFinActual = listaSemanas[0]?.fechaFin || new Date(anioActual, 10, 10);
+
+      const semanasFormateadas = listaSemanas.map((s) => {
+        const esActual = s.semana === semanaActual && s.anio === anioActual;
+        const rango = formatearRangoFechas(s.fechaInicio, s.fechaFin);
+        return {
+          semana: s.semana,
+          anio: s.anio,
+          label: `Semana ${s.semana} (${s.anio})`,
+          rangoFechas: rango,
+          esActual
+        };
+      });
+
+      // Contar tareas de la semana actual
       const totalTareas = await prisma.operacionOM.count({
         where: {
-          semanaProg: semana,
-          anioProg: anio,
+          semanaProg: semanaActual,
+          anioProg: anioActual,
           activo: true,
           NOT: [
             { numeroOrden: { contains: 'Opci' } },
@@ -73,13 +150,14 @@ export class OperariosController {
       });
 
       return res.json({
-        semana,
-        anio,
-        fechaInicio,
-        fechaFin,
+        semana: semanaActual,
+        anio: anioActual,
+        fechaInicio: fechaInicioActual,
+        fechaFin: fechaFinActual,
         tituloSemana: `Tareas de la Semana en Curso`,
-        rangoFechas: formatearRangoFechas(fechaInicio, fechaFin),
+        rangoFechas: formatearRangoFechas(fechaInicioActual, fechaFinActual),
         totalTareas,
+        semanasDisponibles: semanasFormateadas,
         ptoTbjo
       });
     } catch (error: any) {
@@ -331,7 +409,9 @@ export class OperariosController {
         numeroOrden,
         operarioNombre = 'Operario',
         comentario,
-        fotoInicial
+        fotoInicial,
+        semana,
+        anio
       } = req.body;
 
       if (!textoOperacion || String(textoOperacion).trim() === '') {
@@ -340,14 +420,18 @@ export class OperariosController {
 
       const ptoTbjo = '340CRR';
 
-      // Obtener semana activa
-      const ultimaDotacion = await prisma.dotacionSemanalArauco.findFirst({
-        where: { ptoTbjo },
-        orderBy: [{ anio: 'desc' }, { semana: 'desc' }]
-      });
+      // Obtener semana elegida o activa por defecto
+      let semanaProg = semana ? parseInt(String(semana), 10) : undefined;
+      let anioProg = anio ? parseInt(String(anio), 10) : undefined;
 
-      const semanaProg = ultimaDotacion?.semana || 44;
-      const anioProg = ultimaDotacion?.anio || 2026;
+      if (!semanaProg || !anioProg) {
+        const ultimaDotacion = await prisma.dotacionSemanalArauco.findFirst({
+          where: { ptoTbjo },
+          orderBy: [{ anio: 'desc' }, { semana: 'desc' }]
+        });
+        semanaProg = ultimaDotacion?.semana || 44;
+        anioProg = ultimaDotacion?.anio || 2026;
+      }
 
       // Generar número de orden provisional o usar el ingresado
       const orderNumber = numeroOrden && String(numeroOrden).trim() !== ''
