@@ -11,6 +11,7 @@ import ProgramacionSemanal from './pages/ProgramacionSemanal';
 import LibroDiarioObra from './pages/LibroDiarioObra';
 import InformesCRR from './pages/InformesCRR';
 import GestionPersonal from './pages/GestionPersonal';
+import PortalOperarios from './pages/PortalOperarios';
 
 const AppLayout: React.FC = () => {
   return (
@@ -34,9 +35,10 @@ export const App: React.FC = () => {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* Rutas Públicas de Autenticación */}
+          {/* Rutas Públicas de Autenticación y Portal de Operarios en Terreno */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/operarios" element={<PortalOperarios />} />
 
           {/* Rutas Protegidas Operativas */}
           <Route element={<ProtectedRoute />}>

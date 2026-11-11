@@ -89,6 +89,7 @@ export const Navbar: React.FC = () => {
   const navItems = [
     { to: '/sap', label: 'Ingesta SAP', shortLabel: 'SAP', icon: FileSpreadsheet },
     { to: '/programacion', label: 'Programa Semanal PS', shortLabel: 'Programa PS', icon: CalendarDays },
+    { to: '/operarios', label: 'Portal Operarios 👷', shortLabel: 'Operarios', icon: HardHat },
     { to: '/triaje', label: 'Cartera & Backlog OM', shortLabel: 'Cartera OM', icon: Filter },
     { to: '/personal', label: 'Dotación', shortLabel: 'Dotación', icon: Users },
     { to: '/obras', label: 'Libro Diario', shortLabel: 'Libro Diario', icon: BookOpen },

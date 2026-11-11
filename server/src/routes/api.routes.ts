@@ -8,6 +8,7 @@ import { ObrasController } from '../controllers/obras.controller';
 import { InformesController } from '../controllers/informes.controller';
 import { AdminController } from '../controllers/admin.controller';
 import { ProgramacionAraucoController } from '../controllers/programacionArauco.controller';
+import { OperariosController } from '../controllers/operarios.controller';
 import { authMiddleware } from '../middlewares/auth.middleware';
 
 const router = Router();
@@ -83,5 +84,12 @@ router.delete('/informes/:id', authMiddleware as any, InformesController.deleteB
 // 8. ADMINISTRACIÓN, LIMPIEZA Y ESTADO DE RENDER / SISTEMA
 router.get('/system/status', AdminController.getSystemStatus);
 router.post('/admin/clean-demo', authMiddleware as any, AdminController.cleanDemoData as any);
+
+// 9. PORTAL OPERARIOS (ACCESO TERRENO SIN CONSUMO DE LICENCIAS)
+router.get('/operarios/info-semana', OperariosController.getInfoSemana);
+router.get('/operarios/tareas', OperariosController.getTareas);
+router.post('/operarios/tareas/:id/evidencia', OperariosController.guardarEvidencia);
+router.post('/operarios/tareas/nueva', OperariosController.crearTareaNueva);
+router.get('/operarios/personal', OperariosController.getPersonal);
 
 export default router;

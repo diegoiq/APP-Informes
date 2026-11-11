@@ -348,6 +348,62 @@ class ApiService {
       body: JSON.stringify({ ids })
     });
   }
+
+  // ==========================================
+  // PORTAL OPERARIOS (TERRENO ARAUCO)
+  // ==========================================
+  public getOperariosInfoSemana(ptoTbjo: string = '340CRR') {
+    return this.request(`/operarios/info-semana?ptoTbjo=${encodeURIComponent(ptoTbjo)}`);
+  }
+
+  public getOperariosTareas(params: {
+    especialidad?: string;
+    search?: string;
+    semana?: number;
+    anio?: number;
+    ptoTbjo?: string;
+  } = {}) {
+    const query = new URLSearchParams();
+    if (params.especialidad) query.append('especialidad', params.especialidad);
+    if (params.search) query.append('search', params.search);
+    if (params.semana) query.append('semana', String(params.semana));
+    if (params.anio) query.append('anio', String(params.anio));
+    if (params.ptoTbjo) query.append('ptoTbjo', params.ptoTbjo);
+    return this.request(`/operarios/tareas?${query.toString()}`);
+  }
+
+  public guardarOperarioEvidencia(id: string, data: {
+    etapa: 'Antes' | 'Durante' | 'Después';
+    fotoUrl: string;
+    comentario?: string;
+    operarioNombre?: string;
+    estadoEjecucion?: string;
+  }) {
+    return this.request(`/operarios/tareas/${id}/evidencia`, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public crearOperarioTareaNueva(data: {
+    especialidad: 'Civil' | 'Soldador';
+    textoOperacion: string;
+    ubicacionTecnica?: string;
+    numeroOrden?: string;
+    operarioNombre: string;
+    comentario?: string;
+    fotoInicial?: string;
+  }) {
+    return this.request('/operarios/tareas/nueva', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  public getOperariosPersonal(especialidad?: string) {
+    const q = especialidad ? `?especialidad=${encodeURIComponent(especialidad)}` : '';
+    return this.request(`/operarios/personal${q}`);
+  }
 }
 
 export const api = new ApiService();

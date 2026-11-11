@@ -1155,6 +1155,11 @@ export const ProgramacionSemanal: React.FC = () => {
                       <span className="font-mono font-extrabold text-xs text-sky-800 bg-sky-100 px-2 py-0.5 rounded">
                         OT {op.numeroOrden}
                       </span>
+                      {(op.statusSistema?.includes('CREADA_TERRENO') || op.numeroOrden?.startsWith('TERR-')) && (
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                          👷 Terreno
+                        </span>
+                      )}
                       <span className="font-mono font-bold text-[11px] text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
                         Op. {op.numeroOperacion}
                       </span>
@@ -1393,7 +1398,14 @@ export const ProgramacionSemanal: React.FC = () => {
                   return (
                     <tr key={op.id} className="hover:bg-slate-50 transition">
                       <td className="py-2.5 px-3 font-extrabold text-sky-700 font-mono">
-                        {op.numeroOrden}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{op.numeroOrden}</span>
+                          {(op.statusSistema?.includes('CREADA_TERRENO') || op.numeroOrden?.startsWith('TERR-')) && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-amber-100 text-amber-900 border border-amber-300">
+                              👷 Terreno
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="py-2.5 px-2 text-center font-bold text-slate-500 font-mono">
                         {op.numeroOperacion}
