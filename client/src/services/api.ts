@@ -9,7 +9,7 @@ class ApiService {
     return localStorage.getItem('token');
   }
 
-  private async request(endpoint: string, options: RequestInit = {}) {
+  private async request(endpoint: string, options: RequestInit = {}, retries: number = 2): Promise<any> {
     const token = this.getToken();
     const headers: Record<string, string> = {
       ...(options.headers as Record<string, string>),
@@ -23,26 +23,41 @@ class ApiService {
       headers['Content-Type'] = 'application/json';
     }
 
-    const res = await fetch(`${API_URL}${endpoint}`, {
-      ...options,
-      headers
-    });
+    try {
+      const res = await fetch(`${API_URL}${endpoint}`, {
+        ...options,
+        headers
+      });
 
-    const data = await res.json().catch(() => null);
-
-    if (!res.ok) {
-      let errorMsg = `Error ${res.status}: ${res.statusText}`;
-      if (data?.message && data?.error && data.message !== data.error) {
-        errorMsg = `${data.message} (${data.error})`;
-      } else if (data?.message) {
-        errorMsg = data.message;
-      } else if (data?.error) {
-        errorMsg = data.error;
+      // Blindaje Render: Si la instancia se encuentra despertando (502, 503, 504), reintentar automáticamente
+      if ((res.status === 502 || res.status === 503 || res.status === 504) && retries > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return this.request(endpoint, options, retries - 1);
       }
-      throw new Error(errorMsg);
-    }
 
-    return data;
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        let errorMsg = `Error ${res.status}: ${res.statusText}`;
+        if (data?.message && data?.error && data.message !== data.error) {
+          errorMsg = `${data.message} (${data.error})`;
+        } else if (data?.message) {
+          errorMsg = data.message;
+        } else if (data?.error) {
+          errorMsg = data.error;
+        }
+        throw new Error(errorMsg);
+      }
+
+      return data;
+    } catch (err: any) {
+      // Reintento ante fallos de conexión por suspensión de Render
+      if (retries > 0 && (err.name === 'TypeError' || String(err.message).includes('Failed to fetch'))) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        return this.request(endpoint, options, retries - 1);
+      }
+      throw err;
+    }
   }
 
   // Auth

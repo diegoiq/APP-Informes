@@ -17,40 +17,66 @@ import { ProgramacionAraucoController } from './controllers/programacionArauco.c
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Blindaje de proceso ante excepciones no controladas (evita caídas abruptas del contenedor de Render)
+process.on('unhandledRejection', (reason: any) => {
+  console.error('⚠️ [ALERTA DE PROCESO] Promesa rechazada no manejada:', reason?.message || reason);
+});
+
+process.on('uncaughtException', (err: any) => {
+  console.error('🚨 [ALERTA DE PROCESO] Excepción no capturada:', err?.message || err);
+});
+
 // Middlewares
 app.use(cors({
   origin: '*',
   credentials: true
 }));
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Límite optimizado para imágenes comprimidas (<100KB c/u) que previene desbordamiento de RAM
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
-// Health Check
-app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'APP-Informes Backend',
-    version: '1.0.0',
-    timestamp: new Date().toISOString()
-  });
+// Health Check con verificación de conectividad a Base de Datos
+app.get('/api/health', async (req, res) => {
+  try {
+    await prisma.$queryRawUnsafe('SELECT 1');
+    res.json({
+      status: 'ok',
+      service: 'APP-Informes Backend',
+      database: 'connected',
+      version: '1.0.0',
+      timestamp: new Date().toISOString()
+    });
+  } catch (err: any) {
+    res.status(503).json({
+      status: 'degraded',
+      service: 'APP-Informes Backend',
+      database: 'disconnected',
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
 });
 
 // Rutas API Principales
 app.use('/api', router);
 
-// Servir frontend compilado en producción
+// Servir frontend compilado en producción con políticas de caché eficientes
 const clientDistPath = path.resolve(__dirname, '../../client/dist');
 if (fs.existsSync(clientDistPath)) {
-  app.use(express.static(clientDistPath));
+  app.use(express.static(clientDistPath, {
+    maxAge: '1d',
+    etag: true
+  }));
   app.get('*', (req, res, next) => {
     if (req.path.startsWith('/api')) return next();
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(clientDistPath, 'index.html'));
   });
 }
 
 // Iniciar Servidor
-app.listen(PORT, async () => {
+const server = app.listen(PORT, async () => {
   console.log(`====================================================`);
   console.log(`🚀 APP-INFORMES SERVER RUNNING ON PORT ${PORT}`);
   console.log(`📡 URL Base: http://localhost:${PORT}/api`);
@@ -130,5 +156,22 @@ app.listen(PORT, async () => {
     console.error('Info inicialización usuario:', err.message);
   }
 });
+
+// Apagado elegante ante señales de Render (SIGTERM/SIGINT) para evitar conexiones colgadas en Supabase
+const gracefulShutdown = async (signal: string) => {
+  console.log(`\n🛑 Recibida señal ${signal}. Cerrando conexiones elegantemente...`);
+  server.close(async () => {
+    try {
+      await prisma.$disconnect();
+      console.log('✅ Conexión con base de datos cerrada limpiamente.');
+    } catch (e: any) {
+      console.error('Error al desconectar Prisma:', e?.message || e);
+    }
+    process.exit(0);
+  });
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 export default app;

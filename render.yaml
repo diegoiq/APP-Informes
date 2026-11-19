@@ -11,6 +11,7 @@ services:
     plan: free
     region: oregon
     branch: main
+    healthCheckPath: /api/health
     # Fase de compilación del monorepo (asegura instalación de definiciones de tipos)
     buildCommand: npm install --include=dev && npm run build
     # Sincroniza esquema de PostgreSQL sin borrar datos existentes y arranca Express con límite de memoria V8 seguro para Render Free Tier (512MB)
@@ -20,6 +21,8 @@ services:
         value: production
       - key: PORT
         value: 10000
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=384"
       - key: DATABASE_URL
         sync: false
       - key: DIRECT_URL

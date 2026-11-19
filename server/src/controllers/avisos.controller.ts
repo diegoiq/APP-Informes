@@ -481,19 +481,25 @@ export class AvisosController {
 
   /**
    * Elimina/archiva toda la base cargada (Avisos, Operaciones OM, Contactos y opcionalmente obras/informes)
+   * BLINDAJE: Protege operaciones asignadas a Programas Semanales (PS) a menos que se indique fullReset estricto.
    */
   public static async clearExcelData(req: Request, res: Response) {
     try {
       const { fullReset = false, includeObras = false, includeInformes = false, includePersonal = false } = req.body || {};
 
-      // 1. Soft-delete de operaciones OM vinculadas a avisos
-      const opsResult = await prisma.operacionOM.deleteMany({});
+      // 1. Soft-delete de operaciones OM: Si no es fullReset, se conservan intactas las operaciones asignadas a semanas PS
+      const opsResult = await prisma.operacionOM.deleteMany({
+        where: fullReset ? {} : { semanaProg: null }
+      });
       
       // 2. Soft-delete de contactos de triaje
       const triajeResult = await prisma.triajeContacto.deleteMany({});
 
-      // 3. Soft-delete de programaciones semanales vinculadas a avisos
-      const progResult = await prisma.programacionSemanal.deleteMany({});
+      // 3. Soft-delete de programaciones semanales vinculadas a avisos (solo si fullReset)
+      let progResult = { count: 0 };
+      if (fullReset) {
+        progResult = await prisma.programacionSemanal.deleteMany({});
+      }
 
       // 4. Soft-delete de todos los avisos
       const avisosResult = await prisma.aviso.deleteMany({});
