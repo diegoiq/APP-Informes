@@ -242,35 +242,44 @@ export const InformesCRR: React.FC = () => {
   };
 
   // Abrir instancia de edición de un informe existente sin perder datos en Render
-  const handleOpenEditInforme = (inf: any) => {
-    setEditingInformeId(inf.id);
-    setTipoInforme(inf.tipoInforme || 'INFORME PRELIMINAR');
-    setCodigoInforme(inf.codigoInforme || '');
-    setTitulo(inf.titulo || 'INFORME TÉCNICO CRR');
-    setEmpresaContratista(inf.empresaContratista || 'A DEFINIR');
-    setObservaciones(inf.observaciones || '');
+  const handleOpenEditInforme = async (inf: any) => {
+    let fullInf = inf;
+    if (inf?.id && (!inf.fotos || inf.fotos.some((f: any) => !f.url))) {
+      try {
+        fullInf = await api.getInformeById(inf.id);
+      } catch (e) {
+        console.warn('Usando versión de listado para informe:', e);
+      }
+    }
+
+    setEditingInformeId(fullInf.id);
+    setTipoInforme(fullInf.tipoInforme || 'INFORME PRELIMINAR');
+    setCodigoInforme(fullInf.codigoInforme || '');
+    setTitulo(fullInf.titulo || 'INFORME TÉCNICO CRR');
+    setEmpresaContratista(fullInf.empresaContratista || 'A DEFINIR');
+    setObservaciones(fullInf.observaciones || '');
     setFechaElaboracion(
-      inf.fechaElaboracion
-        ? new Date(inf.fechaElaboracion).toISOString().split('T')[0]
+      fullInf.fechaElaboracion
+        ? new Date(fullInf.fechaElaboracion).toISOString().split('T')[0]
         : new Date().toISOString().split('T')[0]
     );
-    setDistribucion(inf.distribucion || 'Inspección Técnica Arauco / Operaciones 340CRR');
-    setCopiaAsignada(inf.copiaAsignada || 'Inspección Técnica Arauco');
-    setAvisoNumeroManual(inf.avisoNumero || '');
-    setOrdenNumeroManual(inf.ordenNumero || '');
-    setUbicacionTecnicaManual(inf.ubicacionTecnica || '');
+    setDistribucion(fullInf.distribucion || 'Inspección Técnica Arauco / Operaciones 340CRR');
+    setCopiaAsignada(fullInf.copiaAsignada || 'Inspección Técnica Arauco');
+    setAvisoNumeroManual(fullInf.avisoNumero || '');
+    setOrdenNumeroManual(fullInf.ordenNumero || '');
+    setUbicacionTecnicaManual(fullInf.ubicacionTecnica || '');
 
-    const matchingAviso = avisos.find((a) => a.numeroAviso === inf.avisoNumero);
+    const matchingAviso = avisos.find((a) => a.numeroAviso === fullInf.avisoNumero);
     setAvisoSeleccionado(matchingAviso || null);
 
-    setObjetivo(inf.objetivo || '');
-    setLugarObraTexto(inf.lugarObraTexto || '');
-    setLugarObraFotoUrl(inf.lugarObraFotoUrl || '');
+    setObjetivo(fullInf.objetivo || '');
+    setLugarObraTexto(fullInf.lugarObraTexto || '');
+    setLugarObraFotoUrl(fullInf.lugarObraFotoUrl || '');
 
     // Deduplicar fotos por URL al cargar en el editor
     const seenUrls = new Set<string>();
     const uniqueFotos: any[] = [];
-    for (const f of inf.fotos || []) {
+    for (const f of fullInf.fotos || []) {
       const url = String(f.url || '').trim();
       if (!url || seenUrls.has(url)) continue;
       seenUrls.add(url);
@@ -283,18 +292,18 @@ export const InformesCRR: React.FC = () => {
     }
     setFotosList(uniqueFotos);
 
-    setAnexosTexto(inf.anexosTexto || '');
+    setAnexosTexto(fullInf.anexosTexto || '');
     let parsedAnexos: string[] = [];
-    if (inf.anexosFotos) {
+    if (fullInf.anexosFotos) {
       try {
-        const parsed = JSON.parse(inf.anexosFotos);
+        const parsed = JSON.parse(fullInf.anexosFotos);
         if (Array.isArray(parsed)) parsedAnexos = parsed;
       } catch {
         parsedAnexos = [];
       }
     }
     setAnexosFotosList(parsedAnexos);
-    setExistingFirmaUrl(inf.firmaElaboroUrl || '');
+    setExistingFirmaUrl(fullInf.firmaElaboroUrl || '');
     setActiveStep(1);
     setVistaPreviaDoc(false);
     setShowModal(true);

@@ -71,7 +71,7 @@ async function cleanDuplicateFotosInDB(informe: any) {
 
 export class InformesController {
   /**
-   * Listar todos los informes técnicos CRR (limpiando fotos duplicadas si existieran)
+   * Listar todos los informes técnicos CRR (optimizado en memoria para Render/Cloud)
    */
   public static async list(req: Request, res: Response) {
     try {
@@ -81,13 +81,18 @@ export class InformesController {
           responsable: {
             select: { id: true, nombre: true, email: true, rol: true }
           },
-          fotos: true
+          fotos: {
+            select: {
+              id: true,
+              etapa: true,
+              diagnosticoTecnico: true,
+              pieDeFoto: true
+              // Se excluye 'url' (base64) del listado masivo para evitar saturar la memoria RAM (512MB) de Render.
+              // El detalle completo con imágenes de alta resolución se entrega bajo demanda vía getById (/api/informes/:id).
+            }
+          }
         }
       });
-
-      for (const inf of informes) {
-        await cleanDuplicateFotosInDB(inf);
-      }
 
       return res.json(informes);
     } catch (error: any) {
