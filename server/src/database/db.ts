@@ -4,8 +4,14 @@ export const prisma = new PrismaClient({
   log: process.env.NODE_ENV === 'development' ? ['warn', 'error'] : ['error']
 });
 
-// Middleware global de Soft-Delete: Prohíbe DELETE físico en toda la base de datos
+// Middleware global de Soft-Delete: Prohíbe DELETE físico en entidades principales de negocio
 prisma.$use(async (params, next) => {
+  // Eximir modelos subordinados de fotos para permitir reemplazos limpios y deduplicación física
+  const exemptModels = ['FotoInformeCRR', 'FotoBitacora'];
+  if (params.model && exemptModels.includes(params.model)) {
+    return next(params);
+  }
+
   // 1. Interceptar delete unitario y convertirlo en soft-delete
   if (params.action === 'delete') {
     params.action = 'update';
